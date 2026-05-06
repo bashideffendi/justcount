@@ -606,3 +606,79 @@ label {
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ====================================================== */
+/* === MOBILE RESPONSIVE — fix card mepet pinggir HP   === */
+/* ====================================================== */
+
+@media (max-width: 640px) {
+  /* Container & main: kasih breathing room dari edge viewport */
+  .container, .container-narrow { padding: 0 14px; }
+  main { padding: 18px 0; min-height: calc(100vh - 60px); }
+
+  /* Cards: kurangi internal padding biar gak makan ruang */
+  .card { padding: 16px; border-radius: 8px; }
+  .card-compact { padding: 12px; }
+  .card-header { padding-bottom: 12px; margin-bottom: 12px; }
+
+  /* Section block lain (checklist, area, summary) */
+  .area-section { padding: 16px 14px 18px; }
+  .area-section-title { font-size: 16px; }
+  .summary-strip { padding: 14px 16px; gap: 12px; }
+  .summary-strip-item { padding: 4px 0; border-right: none; border-bottom: 1px solid var(--c-line); }
+  .summary-strip-item:last-child { border-bottom: none; }
+  .summary-strip-value { font-size: 20px; }
+  .cl-item { padding: 14px 16px; }
+  .cl-head { gap: 10px; }
+  .cl-detail-box { padding: 10px 12px; font-size: 11px; }
+
+  /* Topbar: row jadi wrap di HP, brand dgn nav stacking */
+  .topbar { padding: 12px 0; }
+  .topbar-row { flex-wrap: wrap; gap: 10px; }
+  .nav { flex-wrap: wrap; gap: 2px; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .brand { font-size: 18px; }
+  .brand-tag { font-size: 10px; }
+
+  /* Page header: judul + action stack */
+  .page-header { margin-bottom: 18px; padding-bottom: 14px; }
+  .page-title h1 { font-size: 22px; }
+  .crumb { font-size: 12px; }
+
+  /* Stats: padding lebih kecil di HP */
+  .stat { padding: 14px 16px; border-radius: 10px; }
+  .stat-value { font-size: 22px; }
+  .stat-label { font-size: 10px; }
+
+  /* Buttons: tap target jangan kekecilan */
+  .btn { padding: 10px 14px; font-size: 13px; }
+
+  /* Forms */
+  .form-row { gap: 12px; margin-bottom: 12px; }
+
+  /* Alerts: tambah breathing inside */
+  .alert { padding: 12px 14px; font-size: 13px; }
+
+  /* Tables: scroll horizontal, jangan break layout */
+  table.data, table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+  /* Tabs */
+  .tabs { gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 14px; font-size: 12px; white-space: nowrap; }
+
+  /* Modal kalo ada — pastikan gak overflow */
+  .modal { padding: 16px; max-width: calc(100vw - 24px); }
+}
+
+/* HP kecil banget (iPhone SE, dll < 380px) */
+@media (max-width: 380px) {
+  .container, .container-narrow { padding: 0 10px; }
+  .card { padding: 14px; }
+  .area-section { padding: 14px 12px 16px; }
+  .cl-item { padding: 12px 14px; }
+  .stat { padding: 12px 14px; }
+  .stat-value { font-size: 20px; }
+  .nav a { padding: 6px 8px; font-size: 11px; }
+}
