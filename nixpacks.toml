@@ -1,0 +1,13 @@
+# Override Nixpacks default biar gak pakai cache mount untuk node_modules/.cache
+# (cache mount sering bikin EBUSY race condition di build kedua dst).
+# App ini plain Express + better-sqlite3, gak butuh build-tool cache (webpack/vite).
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev --no-audit --prefer-offline"]
+cacheDirectories = []
+
+[start]
+cmd = "node server.js"
