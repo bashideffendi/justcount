@@ -3,14 +3,18 @@ const { generateKodeAkses } = require('../lib/helpers');
 
 function seedDummy() {
   const db = getDb();
-  const summary = { opd: 0, paket: 0, ta: 0, biaya_personel: 0, biaya_non_personel: 0 };
+  const summary = { opd: 0, paket: 0, sp2d: 0, ta: 0, biaya_personel: 0, biaya_non_personel: 0 };
 
   const insertOpd = db.prepare('INSERT OR IGNORE INTO opd(nama, kode_akses) VALUES (?, ?)');
   const findOpd = db.prepare('SELECT id FROM opd WHERE LOWER(nama) = LOWER(?)');
   const insertPaket = db.prepare(`
-    INSERT OR IGNORE INTO paket(opd_id, nama_pekerjaan, no_sp2d, nilai_paket, tahun_anggaran,
+    INSERT OR IGNORE INTO paket(opd_id, nomor_paket, nama_pekerjaan, nilai_paket, tahun_anggaran,
       no_kontrak, tanggal_mulai, tanggal_selesai, jenis_kontrak, jenis_konsultansi, output_diharapkan, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertSp2d = db.prepare(`
+    INSERT OR IGNORE INTO paket_sp2d(paket_id, no_sp2d, tanggal_sp2d, nilai_sp2d)
+    VALUES (?, ?, ?, ?)
   `);
   const insertTa = db.prepare(`
     INSERT INTO tenaga_ahli_kontrak(paket_id, nama, nik, jabatan, periode_mulai, periode_selesai)
@@ -73,10 +77,11 @@ function seedDummy() {
         const tglSelesai = `2025-${String(endMonth).padStart(2, '0')}-30`;
 
         const noSp2d = `SP2D/DUMMY/${sp2dCounter}/2025`;
+        const nomorPaket = `PAKET/DUMMY/${oi}-${pi}/2025`;
         const r = insertPaket.run(
           opdId,
+          nomorPaket,
           isPengawasan ? `Pengawasan Pembangunan Gedung Blok-${oi}-${pi}` : `Perencanaan Renovasi Fasilitas-${oi}-${pi}`,
-          noSp2d,
           nilai,
           2025,
           `KTR/${oi}/${pi}/2025`,
@@ -90,6 +95,10 @@ function seedDummy() {
         if (r.changes === 0) continue;
         const paketId = r.lastInsertRowid;
         summary.paket += 1;
+
+        // Tambah 1 SP2D per paket dummy (multi-SP2D bisa di-test manual via UI)
+        insertSp2d.run(paketId, noSp2d, tglMulai, nilai);
+        summary.sp2d += 1;
 
         // Tenaga ahli — campur shared NIK (overlap) + unik per paket
         const tas = [
