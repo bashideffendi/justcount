@@ -1,7 +1,7 @@
 {
-  "name": "jaskon-audit",
+  "name": "justcount",
   "version": "0.1.0",
-  "description": "Tools pengujian jasa konsultan konstruksi (perencanaan & pengawasan) untuk auditor APIP",
+  "description": "Just Count — audit kepatuhan jasa konsultansi konstruksi untuk auditor BPK & APIP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,7 +10,7 @@
     "reset": "node db/reset.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
