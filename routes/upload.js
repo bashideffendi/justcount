@@ -207,4 +207,120 @@ router.post('/seed-dummy', ensureAdmin, (req, res) => {
   res.json({ ok: true, ...result });
 });
 
+// === Download template Excel SP2D ===
+// Generate workbook on-the-fly, no static file needed.
+router.get('/template-sp2d.xlsx', (req, res) => {
+  const wb = xlsx.utils.book_new();
+
+  // === Sheet 1: Template (header + 5 baris contoh) ===
+  const templateRows = [
+    {
+      'Nomor Paket': 'PKT/PUPR/001/2025',
+      'Nama OPD': 'Dinas PUPR Kab Sampang',
+      'Nama Pekerjaan': 'Pengawasan Pembangunan Jembatan Camplong',
+      'Nomor SP2D': '00001/SP2D/PUPR/2025',
+      'Tanggal SP2D': '15 Maret 2025',
+      'Nilai SP2D': 250000000,
+      'Tahun Anggaran': 2025,
+      'Jenis Konsultansi': 'Pengawasan',
+      'Jenis Akun': 'Belanja Jasa Konsultansi',
+      'Nama Rekening': 'Pengawasan Konstruksi Jembatan',
+      'Nama Penerima': 'AHMAD NAJIBUL HOERI CV. BINTANG MAS CONSULTANT',
+    },
+    {
+      'Nomor Paket': 'PKT/PUPR/001/2025', // SP2D termin 2 untuk paket yang sama
+      'Nama OPD': 'Dinas PUPR Kab Sampang',
+      'Nama Pekerjaan': 'Pengawasan Pembangunan Jembatan Camplong',
+      'Nomor SP2D': '00045/SP2D/PUPR/2025',
+      'Tanggal SP2D': '20 Juni 2025',
+      'Nilai SP2D': 250000000,
+      'Tahun Anggaran': 2025,
+      'Jenis Konsultansi': 'Pengawasan',
+      'Jenis Akun': 'Belanja Jasa Konsultansi',
+      'Nama Rekening': 'Pengawasan Konstruksi Jembatan',
+      'Nama Penerima': 'AHMAD NAJIBUL HOERI CV. BINTANG MAS CONSULTANT',
+    },
+    {
+      'Nomor Paket': 'PKT/PERKIM/002/2025',
+      'Nama OPD': 'Dinas Perkim Kab Sampang',
+      'Nama Pekerjaan': 'Perencanaan Renovasi Pasar Tradisional',
+      'Nomor SP2D': '00012/SP2D/PERKIM/2025',
+      'Tanggal SP2D': '5 Februari 2025',
+      'Nilai SP2D': 175000000,
+      'Tahun Anggaran': 2025,
+      'Jenis Konsultansi': 'Perencanaan',
+      'Jenis Akun': 'Belanja Jasa Konsultansi',
+      'Nama Rekening': 'DED Pasar Tradisional',
+      'Nama Penerima': 'PT KARYA MANDIRI ENGINEERING',
+    },
+    {
+      'Nomor Paket': '', // Kosong → SP2D ini berdiri sendiri jadi 1 paket
+      'Nama OPD': 'Dinas Kesehatan Kab Sampang',
+      'Nama Pekerjaan': 'Perencanaan/Pengawasan Renovasi Puskesmas',
+      'Nomor SP2D': '00078/SP2D/DINKES/2025',
+      'Tanggal SP2D': '10 Juli 2025',
+      'Nilai SP2D': 95000000,
+      'Tahun Anggaran': 2025,
+      'Jenis Konsultansi': 'Perencanaan/Pengawasan',
+      'Jenis Akun': 'Belanja Jasa Konsultansi',
+      'Nama Rekening': 'Renovasi Puskesmas',
+      'Nama Penerima': 'SUBHAN AFFANDI, KONSULTAN PERORANGAN',
+    },
+    {
+      'Nomor Paket': 'PKT/PERHUB/003/2025',
+      'Nama OPD': 'Dinas Perhubungan Kab Sampang',
+      'Nama Pekerjaan': 'Studi Kelayakan Terminal Type C',
+      'Nomor SP2D': '00033/SP2D/PERHUB/2025',
+      'Tanggal SP2D': '12/04/2025',
+      'Nilai SP2D': 120000000,
+      'Tahun Anggaran': 2025,
+      'Jenis Konsultansi': 'Non Konstruksi',
+      'Jenis Akun': 'Belanja Jasa Konsultansi',
+      'Nama Rekening': 'Studi Kelayakan',
+      'Nama Penerima': 'CV PRIMA KONSULTAN',
+    },
+  ];
+  const ws1 = xlsx.utils.json_to_sheet(templateRows);
+  ws1['!cols'] = [
+    { wch: 22 }, { wch: 28 }, { wch: 36 }, { wch: 24 }, { wch: 14 },
+    { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 24 }, { wch: 28 }, { wch: 42 },
+  ];
+  xlsx.utils.book_append_sheet(wb, ws1, 'Template');
+
+  // === Sheet 2: Petunjuk pengisian ===
+  const guideRows = [
+    ['KOLOM', 'WAJIB?', 'KETERANGAN', 'CONTOH'],
+    ['Nomor Paket', 'Opsional', 'Pengelompokan multi-SP2D ke 1 paket. Isi sama untuk SP2D yang masuk paket sama. Kosongkan kalau 1 SP2D = 1 paket.', 'PKT/PUPR/001/2025'],
+    ['Nama OPD', 'WAJIB', 'Nama dinas/badan pengelola anggaran. Boleh juga "Nama SKPD" / "OPD" / "SKPD".', 'Dinas PUPR Kab Sampang'],
+    ['Nama Pekerjaan', 'WAJIB', 'Judul/uraian pekerjaan. Boleh juga "Pekerjaan" / "Keterangan Dokumen" / "Keterangan" / "Uraian".', 'Pengawasan Pembangunan Jembatan'],
+    ['Nomor SP2D', 'WAJIB', 'Nomor unik SP2D dari SIPD/SIMDA. Boleh juga "No SP2D" / "No. SP2D" / "SP2D".', '00001/SP2D/PUPR/2025'],
+    ['Tanggal SP2D', 'Opsional', 'Format bebas: ISO (2025-03-15), Indonesia (15 Maret 2025), atau angka (15/03/2025).', '15 Maret 2025'],
+    ['Nilai SP2D', 'WAJIB', 'Nilai dalam rupiah, angka tanpa Rp/separator. Boleh juga "Nilai Paket" / "Nilai".', '250000000'],
+    ['Tahun Anggaran', 'Opsional', 'Tahun anggaran. Auto-detect dari Tanggal SP2D kalau kosong. Boleh juga "Tahun".', '2025'],
+    ['Jenis Konsultansi', 'Opsional', 'Salah satu: Perencanaan, Pengawasan, Perencanaan/Pengawasan (gabungan), Non Konstruksi.', 'Pengawasan'],
+    ['Jenis Akun', 'Opsional', 'Akun belanja dari SIPD. Boleh juga "Akun".', 'Belanja Jasa Konsultansi'],
+    ['Nama Rekening', 'Opsional', 'Nama sub-rekening pada SP2D. Boleh juga "Rekening".', 'Pengawasan Konstruksi'],
+    ['Nama Penerima', 'Opsional', 'Penerima/rekanan SP2D. Sistem auto-parse jadi (Bentuk Badan + Nama Penyedia). Boleh juga "Penerima" / "Rekanan" / "Pelaksana".', 'AHMAD NAJIBUL HOERI CV. BINTANG MAS'],
+    ['Nilai Realisasi', 'Opsional', 'Nilai realisasi (kalau beda dgn nilai SP2D). Boleh juga "Realisasi".', '245000000'],
+    [],
+    ['CATATAN PENTING:', '', '', ''],
+    ['• Header WAJIB di baris 1.', '', '', ''],
+    ['• Sheet pertama yang akan diparse, sheet lain diabaikan.', '', '', ''],
+    ['• Urutan kolom bebas (sistem deteksi via nama header).', '', '', ''],
+    ['• Penamaan header case-insensitive ("nama opd" = "NAMA OPD" = "Nama OPD").', '', '', ''],
+    ['• Kolom tambahan di luar daftar di atas akan diabaikan (gak error).', '', '', ''],
+    ['• Multi-SP2D per paket: kasih "Nomor Paket" yang sama di SP2D yang segrup.', '', '', ''],
+    ['• OPD baru otomatis dibuat dengan kode akses unik (8 char).', '', '', ''],
+    ['• SP2D dengan nomor sama akan dilewat (duplicate-skip).', '', '', ''],
+  ];
+  const ws2 = xlsx.utils.aoa_to_sheet(guideRows);
+  ws2['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 70 }, { wch: 36 }];
+  xlsx.utils.book_append_sheet(wb, ws2, 'Petunjuk');
+
+  const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename="Template_SP2D_JustCount.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
 module.exports = router;

@@ -50,10 +50,16 @@
         </div>
       </div>
 
-      <div class="alert alert-info">
-        <strong>Format Excel:</strong> Sheet pertama, header di baris 1. Kolom wajib:
-        <strong>Nama OPD</strong>, <strong>Nama Pekerjaan</strong>, <strong>Nomor SP2D</strong>, <strong>Nilai Paket</strong>, <strong>Tahun Anggaran</strong>.
-        <br>OPD baru akan otomatis dibuat dengan kode akses unik. Paket duplikat (no SP2D sama) akan dilewat.
+      <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:300px">
+          <strong>Format Excel:</strong> Sheet pertama, header di baris 1. Kolom <strong>WAJIB</strong>:
+          <code>Nama OPD</code>, <code>Nama Pekerjaan</code>, <code>Nomor SP2D</code>, <code>Nilai SP2D</code>.
+          Opsional: Tanggal SP2D, Tahun Anggaran, Jenis Konsultansi, Nama Penerima, Nomor Paket (untuk multi-SP2D), dll.
+          <br><span class="muted" style="font-size:12px">OPD baru otomatis dibuat dgn kode akses unik. SP2D duplikat dilewat. Multi-SP2D per paket: kasih "Nomor Paket" sama di baris yg segrup.</span>
+        </div>
+        <a href="/api/upload/template-sp2d.xlsx" class="btn btn-primary" download style="white-space:nowrap">
+          📥 Download Template
+        </a>
       </div>
 
       <div class="card">
