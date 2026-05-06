@@ -126,11 +126,25 @@ app.use('/api/audit', require('./routes/audit'));
 app.use('/api/ska', require('./routes/ska'));
 app.use('/api/export', require('./routes/export'));
 
-// Static (cache 1 hari di production)
+// Static (assets css/js: must-revalidate biar browser fetch versi baru;
+// HTML: short cache; lain (img, ico): 1d)
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],
-  maxAge: IS_PROD ? '1d' : 0,
   etag: true,
+  setHeaders: (res, filePath) => {
+    if (!IS_PROD) {
+      res.setHeader('Cache-Control', 'no-store');
+      return;
+    }
+    if (/\.(css|js)$/.test(filePath)) {
+      // Force browser to revalidate via ETag setiap request
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    } else if (/\.html$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate'); // 5 min
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day untuk image/ico
+    }
+  },
 }));
 
 // Serve bukti/uploads dengan auth

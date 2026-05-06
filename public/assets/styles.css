@@ -608,6 +608,34 @@ label {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ====================================================== */
+/* === HAMBURGER NAV TOGGLE (HP only)                  === */
+/* ====================================================== */
+.nav-toggle {
+  display: none;
+  width: 40px; height: 40px;
+  background: transparent;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+.nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--c-ink);
+  border-radius: 2px;
+  transition: transform .2s, opacity .2s;
+}
+.topbar-row.nav-open .nav-toggle span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.topbar-row.nav-open .nav-toggle span:nth-child(2) { opacity: 0; }
+.topbar-row.nav-open .nav-toggle span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+/* ====================================================== */
 /* === MOBILE RESPONSIVE — fix card mepet pinggir HP   === */
 /* ====================================================== */
 
@@ -632,14 +660,47 @@ label {
   .cl-head { gap: 10px; }
   .cl-detail-box { padding: 10px 12px; font-size: 11px; }
 
-  /* Topbar: row jadi wrap di HP, brand dgn nav stacking */
-  .topbar { padding: 12px 0; }
-  .topbar-row { flex-wrap: wrap; gap: 10px; }
-  .nav { flex-wrap: wrap; gap: 2px; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .nav::-webkit-scrollbar { display: none; }
-  .nav a { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
-  .brand { font-size: 18px; }
-  .brand-tag { font-size: 10px; }
+  /* Topbar: hamburger active, nav collapse */
+  .topbar { padding: 10px 0; }
+  .topbar-row { flex-wrap: nowrap; gap: 8px; align-items: center; }
+  .nav-toggle { display: flex; flex-shrink: 0; }
+  .brand { font-size: 16px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand-tag { font-size: 9px; margin-left: 4px; }
+
+  /* Nav: hidden by default, drop-down kalo .nav-open */
+  .nav {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: white;
+    border-bottom: 1px solid var(--c-line);
+    border-top: 1px solid var(--c-line);
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 14px 12px;
+    box-shadow: 0 8px 16px rgba(15, 23, 42, .06);
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height .25s ease, opacity .15s, padding .15s;
+    z-index: 50;
+  }
+  .topbar { position: relative; }
+  .topbar-row.nav-open .nav {
+    max-height: 80vh;
+    opacity: 1;
+    pointer-events: auto;
+    overflow-y: auto;
+  }
+  .nav a {
+    padding: 12px 14px;
+    font-size: 14px;
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .nav a.active { background: var(--c-admin-soft); }
+  .nav .btn { width: 100%; justify-content: center; margin-top: 6px; }
 
   /* Page header: judul + action stack */
   .page-header { margin-bottom: 18px; padding-bottom: 14px; }

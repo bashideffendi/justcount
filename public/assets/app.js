@@ -83,3 +83,29 @@ const J = {
   },
 };
 window.J = J;
+
+// === Auto-inject hamburger menu untuk mobile nav ===
+// Topbar punya banyak link, di HP perlu collapse jadi tombol ☰.
+// Inject button ke setiap .topbar-row + toggle .nav-open class.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.topbar-row').forEach(row => {
+    if (row.querySelector('.nav-toggle')) return; // already injected
+    const nav = row.querySelector('.nav');
+    if (!nav) return;
+    const btn = document.createElement('button');
+    btn.className = 'nav-toggle';
+    btn.setAttribute('aria-label', 'Toggle menu');
+    btn.innerHTML = '<span></span><span></span><span></span>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      row.classList.toggle('nav-open');
+    });
+    // Insert before nav supaya order: brand → button → nav (collapsed below)
+    nav.parentNode.insertBefore(btn, nav);
+  });
+  // Close menu kalo klik di luar nav/button
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.nav-toggle') || e.target.closest('.nav')) return;
+    document.querySelectorAll('.topbar-row.nav-open').forEach(r => r.classList.remove('nav-open'));
+  });
+});
