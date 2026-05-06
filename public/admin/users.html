@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Manajemen Auditor — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="usersPage()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a>
+      <a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas">Surat Tugas</a>
+      <a href="/admin/berita-acara">Berita Acara</a>
+      <a href="/admin/temuan-lintas">Temuan Lintas</a>
+      <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users" class="active">Auditor</a>
+      <a href="/admin/pengaturan">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container">
+    <div class="page-header">
+      <div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Manajemen Auditor</h1></div>
+      <div class="page-actions">
+        <button class="btn" @click="openInvite">🎟️ Undang via Link</button>
+        <button class="btn btn-primary" @click="newUser">+ Tambah Auditor Manual</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      Hanya <strong>Super Admin</strong> yang bisa akses halaman ini. <strong>Auditor</strong> punya akses penuh ke audit, kecuali manajemen user. Akun yang dinonaktifkan tidak bisa login tapi history-nya tetap tersimpan.
+      <br><strong>Cara cepat tambah temen audit:</strong> klik <strong>🎟️ Undang via Link</strong> → pilih Surat Tugas → dapat link → share via WA/email → temen klik link → isi form → langsung jadi akun.
+    </div>
+
+    <!-- Invite Modal -->
+    <div x-show="inviteModalOpen" x-cloak
+      style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:1000;overflow-y:auto;padding:5vh 20px"
+      @click.self="inviteModalOpen = false">
+      <div class="card" style="max-width:600px;width:100%;margin:0 auto">
+        <div class="card-header">
+          <div class="card-title">🎟️ Undang Auditor via Link</div>
+          <button class="btn btn-sm btn-ghost" @click="inviteModalOpen = false; generatedLink = ''">×</button>
+        </div>
+
+        <div x-show="!generatedLink">
+          <p class="muted mb-4" style="font-size:13px">
+            Generate link undangan untuk temen tim audit. Mereka klik link → isi form → langsung jadi akun auditor di audit yg dipilih.
+          </p>
+
+          <div class="form-row cols-1">
+            <div class="field">
+              <label>Untuk Audit / Surat Tugas <span style="color:red">*</span></label>
+              <select x-model.number="invForm.surat_tugas_id">
+                <option value="">— Pilih Audit —</option>
+                <template x-for="s in suratTugasList" :key="s.id">
+                  <option :value="s.id" x-text="`${s.nomor} — ${s.nama_pemeriksaan?.slice(0,60)}`"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label>Email Temen (opsional, sebagai hint)</label>
+              <input type="email" x-model="invForm.email_hint" placeholder="bashid@bpk.go.id">
+            </div>
+            <div class="field">
+              <label>Berlaku berapa hari?</label>
+              <select x-model.number="invForm.expires_in_days">
+                <option value="1">1 hari</option>
+                <option value="3">3 hari</option>
+                <option value="7" selected>7 hari (default)</option>
+                <option value="30">30 hari</option>
+                <option value="">Tidak expired</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field" style="max-width:200px">
+              <label>Maks. dipakai berapa kali?</label>
+              <select x-model.number="invForm.max_uses">
+                <option value="1">1 kali (single-use)</option>
+                <option value="3">3 kali</option>
+                <option value="5">5 kali</option>
+                <option value="999">Unlimited</option>
+              </select>
+            </div>
+            <div class="field" style="flex:1">
+              <label>Catatan (opsional)</label>
+              <input type="text" x-model="invForm.catatan" placeholder="Contoh: Untuk tim audit Sampang">
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-4">
+            <button class="btn" @click="inviteModalOpen = false">Batal</button>
+            <div class="flex-1"></div>
+            <button class="btn btn-primary" @click="generateInvite" :disabled="!invForm.surat_tugas_id || generating">
+              <span x-show="!generating">🪄 Generate Link Undangan</span>
+              <span x-show="generating" class="loader"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div x-show="generatedLink">
+          <div class="alert alert-success">
+            <strong>✅ Link Undangan Berhasil Dibuat!</strong><br>
+            <span style="font-size:12px">Copy link di bawah, share ke temen via WA/email. Mereka klik → isi form → akun jadi.</span>
+          </div>
+
+          <div class="field mb-2">
+            <label>Link Undangan</label>
+            <input type="text" :value="generatedLink" readonly style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--c-slate-soft)" @click="$event.target.select()">
+          </div>
+
+          <div class="flex gap-2">
+            <button class="btn btn-primary" @click="copyLink">📋 Copy Link</button>
+            <button class="btn" @click="generatedLink = ''; invForm = { max_uses: 1, expires_in_days: 7 }">+ Buat Link Lain</button>
+            <div class="flex-1"></div>
+            <button class="btn" @click="inviteModalOpen = false; generatedLink = ''">Tutup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- List of active invites -->
+    <div x-show="!editing && invites.length > 0" class="mb-4">
+      <div class="section-divider"><span class="section-divider-title">Link Undangan Aktif</span></div>
+      <template x-for="inv in invites.filter(i => !i.revoked && (i.used_count < i.max_uses) && (!i.expires_at || new Date(i.expires_at) > new Date()))" :key="inv.id">
+        <div class="list-card" style="border-left:4px solid var(--c-amber);background:var(--c-amber-soft)">
+          <div style="flex-shrink:0;width:40px;height:40px;border-radius:8px;background:white;display:flex;align-items:center;justify-content:center;font-size:18px">🎟️</div>
+          <div class="list-card-main">
+            <div class="list-card-title" x-text="inv.st_nama || 'Audit (deleted)'"></div>
+            <div class="list-card-meta">
+              <span x-show="inv.email_hint">Email hint: <strong x-text="inv.email_hint"></strong></span>
+              <span class="muted" x-show="inv.email_hint">·</span>
+              <span><strong x-text="`${inv.used_count}/${inv.max_uses}`"></strong> dipakai</span>
+              <span class="muted" x-show="inv.expires_at">·</span>
+              <span x-show="inv.expires_at">Exp: <span x-text="J.date(inv.expires_at)"></span></span>
+            </div>
+            <div class="list-card-meta mt-2" x-show="inv.catatan" style="font-style:italic" x-text="`📝 ${inv.catatan}`"></div>
+          </div>
+          <div class="list-card-actions">
+            <button class="btn btn-sm" @click="copyInviteLink(inv.token)">📋 Copy Link</button>
+            <button class="btn btn-sm btn-ghost" @click="revokeInvite(inv.id)" style="color:var(--c-red)">🚫 Cabut</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="!editing && list.length > 0">
+      <template x-for="u in list" :key="u.id">
+        <div class="list-card" :style="`border-left:4px solid ${u.role === 'super_admin' ? 'var(--c-admin)' : 'var(--c-emerald)'};${u.aktif ? '' : 'opacity:0.5'}`">
+          <div style="flex-shrink:0;width:48px;height:48px;border-radius:50%;background:var(--c-admin-soft);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--c-admin)" x-text="u.nama?.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()"></div>
+          <div class="list-card-main">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="badge" :class="u.role === 'super_admin' ? 'badge-navy' : 'badge-emerald'" x-text="u.role === 'super_admin' ? '👑 SUPER ADMIN' : '🔍 AUDITOR'"></span>
+              <span class="badge badge-slate" x-show="!u.aktif">⊘ NONAKTIF</span>
+            </div>
+            <div class="list-card-title" x-text="u.nama"></div>
+            <div class="list-card-meta">
+              <span x-text="u.email"></span>
+              <span class="muted" x-show="u.nip">·</span>
+              <span x-show="u.nip">NIP <span x-text="u.nip"></span></span>
+              <span class="muted" x-show="u.jabatan">·</span>
+              <span x-show="u.jabatan" x-text="u.jabatan"></span>
+            </div>
+            <div class="list-card-meta mt-2" x-show="u.role === 'auditor' && u.st_nama" style="color:var(--c-admin)">
+              <strong>📋 Audit:</strong> <span x-text="u.st_nama"></span>
+            </div>
+            <div class="list-card-meta mt-2" x-show="u.role === 'super_admin'" style="color:var(--c-admin)">
+              <strong>👑 Akses semua audit</strong>
+            </div>
+            <div class="list-card-meta mt-2">
+              <span class="muted">Last login:</span>
+              <span x-text="u.last_login_at ? J.date(u.last_login_at) : 'Belum pernah'"></span>
+              <span class="muted">·</span>
+              <span class="muted">Dibuat:</span>
+              <span x-text="J.date(u.created_at)"></span>
+            </div>
+          </div>
+          <div class="list-card-actions">
+            <button class="btn btn-sm" @click="resetPwd(u)" title="Reset password">🔑 Reset Pwd</button>
+            <button class="btn btn-sm btn-primary" @click="edit(u)">Edit</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="!editing && list.length === 0" class="empty-state">
+      <div class="empty-state-icon">👥</div>
+      <div class="empty-state-title">Belum ada auditor selain kamu</div>
+      <div class="empty-state-desc">Tambah teman tim audit biar bisa login & berkontribusi.</div>
+    </div>
+
+    <!-- Form -->
+    <div x-show="editing" class="card">
+      <div class="card-header">
+        <div class="card-title" x-text="form.id ? 'Edit Auditor' : 'Tambah Auditor Baru'"></div>
+        <button class="btn btn-sm btn-ghost" @click="editing = false">× Tutup</button>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Email <span style="color:red">*</span></label>
+          <input type="email" x-model="form.email" placeholder="email@bpk.go.id">
+        </div>
+        <div class="field" x-show="!form.id">
+          <label>Password <span style="color:red">*</span></label>
+          <input type="password" x-model="form.password" placeholder="Min 6 karakter">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Nama Lengkap <span style="color:red">*</span></label>
+          <input type="text" class="upper" x-model="form.nama" @input="J.upr($event, form, 'nama')" placeholder="Nama Lengkap dengan Gelar">
+        </div>
+        <div class="field">
+          <label>NIP</label>
+          <input type="text" x-model="form.nip" placeholder="18 digit NIP" maxlength="18">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Jabatan</label>
+          <input type="text" class="upper" x-model="form.jabatan" @input="J.upr($event, form, 'jabatan')" placeholder="Contoh: Auditor Muda / Ketua Tim">
+        </div>
+        <div class="field">
+          <label>Role <span style="color:red">*</span></label>
+          <select x-model="form.role">
+            <option value="auditor">🔍 Auditor (regular)</option>
+            <option value="super_admin">👑 Super Admin (bisa kelola user)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row cols-1" x-show="form.role === 'auditor'">
+        <div class="field">
+          <label>Assign ke Surat Tugas (Audit) <span style="color:red">*</span></label>
+          <select x-model.number="form.surat_tugas_id">
+            <option value="">— Pilih Audit / Surat Tugas —</option>
+            <template x-for="s in suratTugasList" :key="s.id">
+              <option :value="s.id" x-text="`${s.nomor} — ${s.nama_pemeriksaan?.slice(0,60)}`"></option>
+            </template>
+          </select>
+          <div class="field-help" style="font-size:11px">Auditor cuma akan lihat data di audit ini. Super admin bisa lihat semua audit.</div>
+        </div>
+      </div>
+
+      <div class="field" x-show="form.id">
+        <label>
+          <input type="checkbox" x-model="form.aktif" :true-value="1" :false-value="0">
+          Akun aktif
+        </label>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          <span x-show="!saving">💾 Simpan</span>
+          <span x-show="saving" class="loader"></span>
+        </button>
+        <button class="btn" @click="editing = false">Batal</button>
+        <div class="flex-1"></div>
+        <button x-show="form.id" class="btn btn-danger" @click="del">🗑 Hapus</button>
+      </div>
+    </div>
+  </div></main>
+
+  <script>
+    function usersPage() {
+      return {
+        list: [],
+        suratTugasList: [],
+        invites: [],
+        editing: false,
+        form: {},
+        saving: false,
+        inviteModalOpen: false,
+        invForm: { max_uses: 1, expires_in_days: 7 },
+        generating: false,
+        generatedLink: '',
+        async init() {
+          await this.load();
+          try { const r = await J.fetch('/api/admin/surat-tugas'); this.suratTugasList = r.list || []; } catch {}
+          try { this.invites = await J.fetch('/api/admin/invites'); } catch {}
+        },
+        openInvite() { this.invForm = { max_uses: 1, expires_in_days: 7 }; this.generatedLink = ''; this.inviteModalOpen = true; },
+        async generateInvite() {
+          this.generating = true;
+          try {
+            const r = await J.fetch('/api/admin/invites', { method: 'POST', body: this.invForm });
+            this.generatedLink = `${location.origin}/admin/sign-up?token=${r.token}`;
+            this.invites = await J.fetch('/api/admin/invites');
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.generating = false; }
+        },
+        async copyLink() {
+          try { await navigator.clipboard.writeText(this.generatedLink); J.toast('Link disalin!', 'success'); }
+          catch (e) { J.toast('Copy manual ya', 'warn'); }
+        },
+        async copyInviteLink(token) {
+          const link = `${location.origin}/admin/sign-up?token=${token}`;
+          try { await navigator.clipboard.writeText(link); J.toast(`Link disalin: ${link.slice(0, 50)}...`, 'success'); }
+          catch (e) { J.toast('Copy manual: ' + link, 'warn'); }
+        },
+        async revokeInvite(id) {
+          if (!confirm('Cabut undangan ini? Link tidak bisa dipakai lagi.')) return;
+          try { await J.fetch(`/api/admin/invites/${id}/revoke`, { method: 'POST' }); this.invites = await J.fetch('/api/admin/invites'); J.toast('Dicabut', 'success'); }
+          catch (e) { J.toast(e.message, 'error'); }
+        },
+        async load() {
+          try { this.list = await J.fetch('/api/admin/users'); }
+          catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            if (e.status === 403) { J.toast('Akses ditolak: hanya Super Admin', 'error'); setTimeout(()=>location.href='/admin/dashboard', 1500); return; }
+            J.toast(e.message, 'error');
+          }
+        },
+        newUser() { this.form = { role: 'auditor', aktif: 1 }; this.editing = true; },
+        edit(u) { this.form = { ...u }; this.editing = true; },
+        async save() {
+          this.saving = true;
+          try {
+            if (this.form.id) {
+              await J.fetch(`/api/admin/users/${this.form.id}`, { method: 'PUT', body: this.form });
+            } else {
+              await J.fetch('/api/admin/users', { method: 'POST', body: this.form });
+            }
+            J.toast('Tersimpan', 'success');
+            this.editing = false;
+            await this.load();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.saving = false; }
+        },
+        async resetPwd(u) {
+          const pwd = prompt(`Password baru untuk ${u.nama}:\n\n(Min 6 karakter)`);
+          if (!pwd) return;
+          if (pwd.length < 6) { J.toast('Min 6 karakter', 'error'); return; }
+          try {
+            await J.fetch(`/api/admin/users/${u.id}/reset-password`, { method: 'POST', body: { new_password: pwd } });
+            J.toast(`Password ${u.nama} di-reset`, 'success');
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async del() {
+          if (!confirm(`Hapus akun "${this.form.nama}"? Aksi tidak bisa di-undo.`)) return;
+          try { await J.fetch(`/api/admin/users/${this.form.id}`, { method: 'DELETE' }); this.editing = false; await this.load(); J.toast('Dihapus', 'success'); }
+          catch (e) { J.toast(e.message, 'error'); }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

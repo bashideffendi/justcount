@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Master SBU — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="sbuPage()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a><a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a><a href="/admin/sbu" class="active">Master SBU</a>
+      <a href="/admin/pengaturan">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container">
+    <div class="page-header">
+      <div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Master SBU Personel</h1></div>
+      <div class="page-actions">
+        <select x-model="filterSumber" @change="load">
+          <option value="">Semua sumber</option><option value="inkindo">INKINDO</option><option value="pemda">Pemda</option>
+        </select>
+        <select x-model.number="filterTahun" @change="load">
+          <option value="">Semua tahun</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
+        </select>
+        <button class="btn btn-primary" @click="addRow">+ Tambah</button>
+        <button class="btn" @click="seedInkindo">↻ Seed INKINDO</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>SBU = Standar Biaya Umum personel.</strong> Sumber <strong>INKINDO</strong> adalah placeholder — admin harus edit sesuai Pedoman Standar Minimum INKINDO yang berlaku. Sumber <strong>Pemda</strong> diisi dari Pergub/Perbup SBU daerah. Pilih sumber aktif di menu Pengaturan.
+    </div>
+
+    <div class="card" style="padding:0">
+      <table class="data editable">
+        <thead><tr>
+          <th>Sumber</th><th>Tahun</th><th>Jenjang Keahlian</th><th>Pendidikan</th>
+          <th class="num">Exp Min</th><th class="num">Exp Max</th>
+          <th class="num">Tarif/Bulan</th><th>Catatan</th><th></th>
+        </tr></thead>
+        <tbody>
+          <template x-for="(r, i) in rows" :key="r.id || r._uid">
+            <tr>
+              <td>
+                <select x-model="r.sumber" @change="save(r)">
+                  <option value="inkindo">INKINDO</option><option value="pemda">Pemda</option>
+                </select>
+              </td>
+              <td><input type="number" x-model.number="r.tahun" @input="save(r)" class="num"></td>
+              <td>
+                <select x-model="r.jenjang_keahlian" @change="save(r)">
+                  <option>Tanpa Sertifikat</option><option>Pratama</option><option>Muda</option><option>Madya</option><option>Utama</option>
+                </select>
+              </td>
+              <td>
+                <select x-model="r.jenjang_pendidikan" @change="save(r)">
+                  <option value="">-</option><option>SMA/SMK</option><option>D3/D4</option>
+                  <option>S1</option><option>S2</option><option>S3</option>
+                </select>
+              </td>
+              <td><input type="number" x-model.number="r.pengalaman_tahun_min" @input="save(r)" class="num" style="width:60px"></td>
+              <td><input type="number" x-model.number="r.pengalaman_tahun_max" @input="save(r)" class="num" style="width:60px" placeholder="∞"></td>
+              <td><input type="number" x-model.number="r.tarif_per_bulan" @input="save(r)" class="num"></td>
+              <td><input x-model="r.catatan" @input="save(r)"></td>
+              <td><button class="btn btn-sm btn-ghost" @click="del(r, i)" style="color:var(--c-red)">×</button></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div x-show="rows.length === 0" class="muted center" style="padding:24px">Belum ada SBU. Klik "+ Tambah" atau "↻ Seed INKINDO".</div>
+    </div>
+  </div></main>
+
+  <script>
+    function sbuPage() {
+      return {
+        rows: [],
+        filterSumber: '',
+        filterTahun: '',
+        debouncers: {},
+        async init() { await this.load(); },
+        async load() {
+          try {
+            const q = new URLSearchParams();
+            if (this.filterSumber) q.set('sumber', this.filterSumber);
+            const data = await J.fetch('/api/admin/sbu' + (q.toString() ? '?' + q : ''));
+            this.rows = this.filterTahun ? data.filter(r => r.tahun === this.filterTahun) : data;
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          }
+        },
+        addRow() {
+          this.rows.unshift({ _uid: 'tmp_' + Math.random(), id: null, sumber: 'pemda', tahun: 2025, jenjang_keahlian: 'Muda', jenjang_pendidikan: 'S1', pengalaman_tahun_min: 5, pengalaman_tahun_max: 9, tarif_per_bulan: 0, catatan: '' });
+        },
+        save(r) {
+          if (!r.sumber || !r.tahun || !r.jenjang_keahlian) return;
+          const key = 'sbu_' + (r.id || r._uid);
+          if (!this.debouncers[key]) this.debouncers[key] = J.debounce(async () => {
+            try {
+              if (r.id) await J.fetch(`/api/admin/sbu/${r.id}`, { method: 'PUT', body: r });
+              else { const x = await J.fetch('/api/admin/sbu', { method: 'POST', body: r }); r.id = x.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          }, 800);
+          this.debouncers[key]();
+        },
+        async del(r, i) {
+          if (!confirm('Hapus baris ini?')) return;
+          if (r.id) await J.fetch(`/api/admin/sbu/${r.id}`, { method: 'DELETE' });
+          this.rows.splice(i, 1);
+        },
+        async seedInkindo() {
+          const tahun = prompt('Seed INKINDO untuk tahun:', '2025');
+          if (!tahun) return;
+          await J.fetch('/api/admin/sbu/seed-inkindo', { method: 'POST', body: { tahun: parseInt(tahun, 10) } });
+          J.toast('INKINDO ' + tahun + ' di-seed', 'success');
+          await this.load();
+        },
+      };
+    }
+  </script>
+</body>
+</html>

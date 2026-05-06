@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Form Paket — Just Count OPD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="paketForm()">
+  <header class="topbar opd">
+    <div class="container topbar-row">
+      <a href="/opd/dashboard" class="brand">Just Count <span class="brand-tag">OPD</span></a>
+      <div class="flex items-center gap-4">
+        <span class="autosave-pill" :class="autosaveState">
+          <span x-show="autosaveState === 'saving'" class="loader" style="width:10px;height:10px;border-width:1.5px"></span>
+          <span x-text="autosaveLabel"></span>
+        </span>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('opd')">Keluar</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="page-header">
+        <div class="page-title">
+          <a href="/opd/dashboard" class="crumb">← Daftar Paket</a>
+          <h1 x-text="paket?.nama_pekerjaan || 'Loading...'"></h1>
+          <div class="muted mt-2" x-show="paket" style="font-size:13px">
+            <span x-show="paket?.nomor_paket">Kode Paket: <span class="code" x-text="paket?.nomor_paket"></span> ·</span>
+            Total Nilai: <span class="money" x-text="J.rupiah(paket?.nilai_paket)"></span>
+            <span class="muted">·</span>
+            TA <span x-text="paket?.tahun_anggaran || '-'"></span>
+            <span class="muted">·</span>
+            <span x-text="J.jenisKonsultansi(paket?.jenis_konsultansi)"></span>
+            <span class="muted">·</span>
+            <span x-text="`${sp2d?.length || 0} SP2D`"></span>
+          </div>
+        </div>
+        <div class="page-actions">
+          <span class="badge" :class="`badge-${J.statusBadge(paket?.status || 'belum_diisi').color}`" x-text="J.statusBadge(paket?.status || 'belum_diisi').label"></span>
+          <button class="btn btn-opd" @click="submitFinal" :disabled="paket?.status === 'terkunci' || submitting">
+            <span x-show="!submitting">Submit Final</span>
+            <span x-show="submitting" class="loader"></span>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="paket?.status === 'terkunci'" class="alert alert-warn">
+        <strong>🔒 Paket sudah dikunci auditor.</strong> Data tidak bisa diedit lagi.
+      </div>
+
+      <!-- Section 0: Info SP2D + opsi split (kalau editable) -->
+      <div class="card mb-4" style="background:var(--c-slate-soft);border-style:dashed">
+        <div class="card-header" style="border-bottom:1px solid var(--c-line);margin-bottom:12px;padding-bottom:12px">
+          <div class="card-title" style="font-size:14px">Daftar SP2D Paket Ini <span class="muted" style="font-size:11px;font-weight:normal">(<span x-text="sp2d?.length || 0"></span> SP2D, Total: <span class="money" x-text="J.rupiah(paket?.nilai_paket)"></span>)</span></div>
+        </div>
+        <table class="data" x-show="sp2d?.length > 0" style="font-size:12px">
+          <thead>
+            <tr>
+              <th>No SP2D</th>
+              <th>Tanggal</th>
+              <th class="num">Nilai</th>
+              <th>Penerima (di SP2D)</th>
+              <th>Keterangan</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="s in sp2d || []" :key="s.id">
+              <tr>
+                <td><span class="code" style="font-size:10px" x-text="s.no_sp2d"></span></td>
+                <td x-text="J.date(s.tanggal_sp2d)"></td>
+                <td class="num money" x-text="J.rupiah(s.nilai_sp2d)"></td>
+                <td style="max-width:180px" x-text="s.nama_penerima || '-'"></td>
+                <td style="max-width:300px" x-text="s.keterangan || '-'"></td>
+                <td class="actions">
+                  <button class="btn btn-sm btn-ghost" @click="splitSp2d(s)" :disabled="sp2d.length <= 1 || !canEdit" title="Pisahkan SP2D ini ke paket sendiri">✂ Pisah</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="muted mt-2" style="font-size:11px" x-show="!canEdit">
+          <strong>Catatan:</strong> Paket sudah di-submit / dikunci, tidak bisa pisah SP2D lagi. Hubungi auditor kalau perlu perubahan.
+        </div>
+      </div>
+
+      <!-- Section 1: Data Kontrak (diisi OPD) -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <div class="card-title">Data Kontrak</div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Nomor Kontrak</label>
+            <input type="text" class="upper" x-model="paket.no_kontrak" :disabled="locked" @input="J.upr($event, paket, 'no_kontrak'); autosave()" placeholder="Contoh: 600/123/KTR/2025">
+          </div>
+          <div class="field">
+            <label>Tanggal Kontrak</label>
+            <input type="date" x-model="paket.tanggal_kontrak" :disabled="locked" @change="autosave">
+          </div>
+        </div>
+
+        <div class="form-row cols-3">
+          <div class="field">
+            <label>Tanggal Mulai Pelaksanaan</label>
+            <input type="date" x-model="paket.tanggal_mulai" :disabled="locked" @change="autosave">
+          </div>
+          <div class="field">
+            <label>Tanggal Selesai Pelaksanaan</label>
+            <input type="date" x-model="paket.tanggal_selesai" :disabled="locked" @change="autosave">
+          </div>
+          <div class="field">
+            <label>Durasi (Bulan)</label>
+            <input type="text" :value="durasi" disabled>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Jenis Kontrak</label>
+            <select x-model="paket.jenis_kontrak" :disabled="locked" @change="autosave">
+              <option value="">— Pilih —</option>
+              <option value="lumpsum">Lumpsum</option>
+              <option value="waktu_penugasan">Waktu Penugasan</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Jenis Konsultansi</label>
+            <select x-model="paket.jenis_konsultansi" :disabled="locked" @change="autosave">
+              <option value="">— Pilih —</option>
+              <option value="perencanaan">Perencanaan</option>
+              <option value="pengawasan">Pengawasan</option>
+              <option value="gabungan">Perencanaan &amp; Pengawasan</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field" style="max-width:200px">
+            <label>Bentuk Penyedia</label>
+            <select x-model="paket.bentuk_badan" :disabled="locked" @change="autosave">
+              <option value="">— Pilih —</option>
+              <option value="PT">PT</option>
+              <option value="CV">CV</option>
+              <option value="Perorangan">Perorangan</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1">
+            <label>Nama Penyedia</label>
+            <input type="text" class="upper" x-model="paket.nama_penyedia" :disabled="locked" @input="J.upr($event, paket, 'nama_penyedia'); autosave()" placeholder="Contoh: Bintang Mas Consultant">
+            <div class="field-help" style="font-size:11px">Nama PT/CV atau nama perorangan, tanpa awalan PT/CV (sudah dipilih di kolom kiri).</div>
+          </div>
+        </div>
+
+        <h3 style="font-size:13px;margin:24px 0 8px;color:var(--c-opd);text-transform:uppercase;letter-spacing:0.05em">Pejabat Pengelola Kontrak</h3>
+        <div class="form-row">
+          <div class="field">
+            <label>Nama PPK <span class="muted" style="font-weight:normal">(Pejabat Pembuat Komitmen)</span></label>
+            <input type="text" class="upper" x-model="paket.ppk_nama" :disabled="locked" @input="J.upr($event, paket, 'ppk_nama'); autosave()" placeholder="Contoh: Ir. Ahmad Susanto">
+          </div>
+          <div class="field">
+            <label>NIP PPK</label>
+            <input type="text" x-model="paket.ppk_nip" :disabled="locked" @input="autosave" placeholder="18 digit NIP" maxlength="18">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Nama PPTK <span class="muted" style="font-weight:normal">(Pejabat Pelaksana Teknis Kegiatan)</span></label>
+            <input type="text" class="upper" x-model="paket.pptk_nama" :disabled="locked" @input="J.upr($event, paket, 'pptk_nama'); autosave()" placeholder="Contoh: Drs. Budi Hartono">
+          </div>
+          <div class="field">
+            <label>NIP PPTK</label>
+            <input type="text" x-model="paket.pptk_nip" :disabled="locked" @input="autosave" placeholder="18 digit NIP" maxlength="18">
+          </div>
+        </div>
+
+        <div class="form-row cols-1">
+          <div class="field">
+            <label>Output Diharapkan</label>
+            <input type="text" class="upper" x-model="paket.output_diharapkan" :disabled="locked" @input="J.upr($event, paket, 'output_diharapkan'); autosave()" placeholder="Contoh: Laporan Pengawasan Mingguan, DED, Gambar Kerja, RKS, dst.">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Tenaga Ahli -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Tenaga Ahli (sesuai kontrak)</div>
+          <button class="btn btn-sm btn-opd" @click="addTa" :disabled="locked">+ Tambah Tenaga Ahli</button>
+        </div>
+
+        <div x-show="ta_kontrak.length === 0" class="muted center" style="padding:24px">
+          Belum ada tenaga ahli. Klik "Tambah Tenaga Ahli" untuk mulai.
+        </div>
+
+        <table class="data" x-show="ta_kontrak.length > 0">
+          <thead>
+            <tr>
+              <th style="width:30px">#</th>
+              <th>Nama</th>
+              <th>NIK</th>
+              <th>Jabatan</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(t, i) in ta_kontrak" :key="t._uid || t.id">
+              <tr>
+                <td x-text="i+1"></td>
+                <td><input type="text" class="upper" x-model="t.nama" :disabled="locked" @input="J.upr($event, t, 'nama'); saveTa(t)" placeholder="Nama Lengkap"></td>
+                <td><input type="text" x-model="t.nik" :disabled="locked" @input="saveTa(t)" placeholder="16 Digit" maxlength="16"></td>
+                <td><input type="text" class="upper" x-model="t.jabatan" :disabled="locked" @input="J.upr($event, t, 'jabatan'); saveTa(t)" placeholder="Contoh: Team Leader"></td>
+                <td><button class="btn btn-sm btn-ghost" @click="delTa(t, i)" :disabled="locked" style="color:var(--c-red)">×</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <div class="muted mt-2" style="font-size:12px">
+          <strong>Catatan:</strong> Periode kerja tenaga ahli mengikuti periode pelaksanaan paket dan rincian biaya personel (man-month) yang nanti diisi auditor.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function paketForm() {
+      return {
+        paketId: null,
+        paket: {},
+        sp2d: [],
+        ta_kontrak: [],
+        autosaveState: '',
+        autosaveLabel: '',
+        submitting: false,
+        get locked() { return this.paket.status === 'terkunci'; },
+        get canEdit() { return ['belum_diisi','draft'].includes(this.paket.status); },
+        async splitSp2d(s) {
+          if (!this.canEdit) return;
+          if (!confirm(`Pisahkan SP2D "${s.no_sp2d}" jadi paket sendiri?\nNilai Rp ${(s.nilai_sp2d||0).toLocaleString('id-ID')} akan keluar dari paket ini.`)) return;
+          try {
+            const r = await J.fetch(`/api/opd/sp2d/${s.id}/split`, { method: 'POST' });
+            J.toast('SP2D dipisahkan ke paket baru', 'success');
+            // Reload paket data
+            const data = await J.fetch(`/api/opd/paket/${this.paketId}`);
+            this.paket = data.paket;
+            this.sp2d = data.sp2d || [];
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        get durasi() {
+          if (!this.paket.tanggal_mulai || !this.paket.tanggal_selesai) return '-';
+          const a = new Date(this.paket.tanggal_mulai);
+          const b = new Date(this.paket.tanggal_selesai);
+          const months = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth()) + (b.getDate() >= a.getDate() ? 0 : -1) + 1;
+          return months > 0 ? `${months} bulan` : '-';
+        },
+        async init() {
+          const url = new URL(location);
+          this.paketId = parseInt(url.searchParams.get('id'), 10);
+          if (!this.paketId) { location.href = '/opd/dashboard'; return; }
+          try {
+            const data = await J.fetch(`/api/opd/paket/${this.paketId}`);
+            this.paket = data.paket;
+            this.sp2d = data.sp2d || [];
+            this.ta_kontrak = data.ta_kontrak.map(t => ({ ...t }));
+            this.debouncedSave = J.debounce(() => this._doSave(), 1500);
+            this.debouncedSaveTa = {};
+          } catch (e) {
+            if (e.status === 401) { location.href = '/opd'; return; }
+            J.toast(e.message, 'error');
+          }
+        },
+        autosave() {
+          if (this.locked) return;
+          this.autosaveState = 'saving';
+          this.autosaveLabel = 'Menyimpan...';
+          this.debouncedSave();
+        },
+        async _doSave() {
+          try {
+            await J.fetch(`/api/opd/paket/${this.paketId}`, { method: 'PUT', body: this.paket });
+            this.autosaveState = 'saved';
+            this.autosaveLabel = '✓ Tersimpan';
+            // refresh status
+            const data = await J.fetch(`/api/opd/paket/${this.paketId}`);
+            this.paket.status = data.paket.status;
+          } catch (e) {
+            this.autosaveState = '';
+            this.autosaveLabel = '';
+            J.toast('Gagal simpan: ' + e.message, 'error');
+          }
+        },
+        addTa() {
+          const tmp = {
+            _uid: 'tmp_' + Math.random().toString(36).slice(2),
+            nama: '', nik: '', jabatan: '',
+            periode_mulai: this.paket.tanggal_mulai || '',
+            periode_selesai: this.paket.tanggal_selesai || '',
+            id: null,
+          };
+          this.ta_kontrak.push(tmp);
+        },
+        async saveTa(t) {
+          if (this.locked) return;
+          // skip kalau belum lengkap
+          if (!t.nama || !t.nik || !t.jabatan || !t.periode_mulai || !t.periode_selesai) return;
+          this.autosaveState = 'saving';
+          this.autosaveLabel = 'Menyimpan TA...';
+          if (!this.debouncedSaveTa[t._uid || t.id]) {
+            this.debouncedSaveTa[t._uid || t.id] = J.debounce((ta) => this._doSaveTa(ta), 1500);
+          }
+          this.debouncedSaveTa[t._uid || t.id](t);
+        },
+        async _doSaveTa(t) {
+          try {
+            const body = { nama: t.nama, nik: t.nik, jabatan: t.jabatan, periode_mulai: t.periode_mulai, periode_selesai: t.periode_selesai };
+            if (t.id) {
+              await J.fetch(`/api/opd/tenaga-ahli/${t.id}`, { method: 'PUT', body });
+            } else {
+              const r = await J.fetch(`/api/opd/paket/${this.paketId}/tenaga-ahli`, { method: 'POST', body });
+              t.id = r.id;
+            }
+            this.autosaveState = 'saved';
+            this.autosaveLabel = '✓ Tersimpan';
+          } catch (e) {
+            this.autosaveState = '';
+            this.autosaveLabel = '';
+            J.toast('Gagal simpan TA: ' + e.message, 'error');
+          }
+        },
+        async delTa(t, i) {
+          if (this.locked) return;
+          if (!confirm(`Hapus tenaga ahli "${t.nama || 'baris ke-' + (i+1)}"?`)) return;
+          try {
+            if (t.id) await J.fetch(`/api/opd/tenaga-ahli/${t.id}`, { method: 'DELETE' });
+            this.ta_kontrak.splice(i, 1);
+            J.toast('Dihapus', 'success');
+          } catch (e) {
+            J.toast(e.message, 'error');
+          }
+        },
+        async submitFinal() {
+          if (this.locked) return;
+          if (!confirm('Submit final? Pastikan semua data sudah benar. Setelah ini auditor akan memverifikasi.')) return;
+          this.submitting = true;
+          try {
+            await J.fetch(`/api/opd/paket/${this.paketId}/submit`, { method: 'POST' });
+            J.toast('Berhasil submit final', 'success');
+            this.paket.status = 'lengkap';
+          } catch (e) {
+            J.toast(e.message, 'error');
+          } finally {
+            this.submitting = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

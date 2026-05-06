@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Just Count — Tools Pengujian Jasa Konsultan Konstruksi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <style>
+    .hero { padding: 80px 0 40px; text-align: center; }
+    .hero h1 { font-size: 42px; line-height: 1.1; max-width: 780px; margin: 0 auto 16px; }
+    .hero p { color: var(--c-ink-soft); font-size: 16px; max-width: 580px; margin: 0 auto 32px; }
+    .role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 760px; margin: 0 auto; }
+    @media (max-width: 700px) { .role-cards { grid-template-columns: 1fr; } }
+    .role-card {
+      display: block;
+      padding: 32px;
+      border: 1px solid var(--c-line);
+      border-radius: 12px;
+      background: white;
+      transition: transform .15s, box-shadow .15s, border-color .15s;
+      cursor: pointer;
+      text-align: left;
+    }
+    .role-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      text-decoration: none;
+    }
+    .role-card.admin:hover { border-color: var(--c-admin); }
+    .role-card.opd:hover { border-color: var(--c-opd); }
+    .role-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+    .role-card.admin .role-tag { color: var(--c-admin); }
+    .role-card.opd .role-tag { color: var(--c-opd); }
+    .role-card h2 { margin-top: 8px; margin-bottom: 8px; }
+    .role-card p { color: var(--c-ink-soft); font-size: 13px; margin: 0; }
+    .footer { text-align: center; padding: 32px 0; color: var(--c-ink-soft); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-row">
+      <div class="brand">Just Count <span class="brand-tag">by Bashid Effendi</span></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero container">
+      <div style="display:inline-block;padding:6px 14px;background:var(--c-admin-soft);color:var(--c-admin);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:24px">Audit Jasa Konsultansi Konstruksi</div>
+      <h1>Kontrol kepatuhan jasa konsultan konstruksi, dari hulu ke hilir</h1>
+      <p>Pengujian kepatuhan perencanaan, pelaksanaan & pelaporan untuk auditor APIP dan satuan kerja. Otomatis hitung pengembalian, generate kertas kerja & BAPK.</p>
+      <div class="role-cards">
+        <a href="/admin/login" class="role-card admin">
+          <div class="role-tag">Auditor / Admin</div>
+          <h2>Masuk Admin</h2>
+          <p>Upload SP2D, kelola OPD, jalankan pengujian, ekspor kertas kerja.</p>
+        </a>
+        <a href="/opd" class="role-card opd">
+          <div class="role-tag">SKPD / OPD</div>
+          <h2>Masuk OPD</h2>
+          <p>Lengkapi data kontrak & tenaga ahli paket konsultansi yang ditugaskan.</p>
+        </a>
+      </div>
+    </section>
+
+    <div class="footer container">
+      <p>© 2026 <strong>Bashid Effendi</strong> · Just Count · <a href="https://github.com" class="muted">v0.1</a></p>
+    </div>
+  </main>
+</body>
+</html>

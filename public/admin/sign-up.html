@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Daftar Akun — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+  <style>
+    .signup-shell { min-height: calc(100vh - 70px); display: flex; align-items: flex-start; justify-content: center; padding: 40px 24px; }
+    .signup-card { width: 100%; max-width: 540px; background: white; padding: 36px 40px; border-radius: 14px; border: 1px solid var(--c-line); box-shadow: var(--shadow-md); }
+    .audit-info { background: var(--c-admin-soft); border: 1px solid var(--c-admin); border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
+    .audit-info h3 { font-family: 'Fraunces', serif; font-size: 16px; color: var(--c-admin); margin-bottom: 6px; }
+    .audit-info-row { font-size: 12px; color: var(--c-ink-soft); margin-top: 2px; }
+  </style>
+</head>
+<body x-data="signupPage()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/" class="brand">Just Count <span class="brand-tag">SIGN UP</span></a>
+    </div>
+  </header>
+
+  <main class="signup-shell">
+    <div class="signup-card">
+      <div x-show="loading" class="center" style="padding:48px"><span class="loader"></span></div>
+
+      <div x-show="!loading && inviteError" class="alert alert-error" x-text="inviteError"></div>
+
+      <div x-show="!loading && audit">
+        <div class="badge badge-navy mb-2" style="display:inline-block">🎟️ UNDANGAN AUDITOR</div>
+        <h1 style="font-family:'Fraunces',serif;font-size:24px;margin-bottom:6px">Daftar Akun Auditor</h1>
+        <p class="muted mb-4" style="font-size:13px">Lengkapi data berikut untuk akses sistem audit. Akun kamu akan otomatis di-link ke audit di bawah ini.</p>
+
+        <div class="audit-info">
+          <h3 x-text="audit.nama_pemeriksaan"></h3>
+          <div class="audit-info-row"><strong>Surat Tugas:</strong> <span x-text="audit.nomor"></span></div>
+          <div class="audit-info-row"><strong>BPK:</strong> <span x-text="audit.bpk_perwakilan"></span></div>
+          <div class="audit-info-row" x-show="audit.entitas_diperiksa"><strong>Entitas:</strong> <span x-text="audit.entitas_diperiksa"></span></div>
+          <div class="audit-info-row mt-2" x-show="creator" style="color:var(--c-admin)"><strong>Diundang oleh:</strong> <span x-text="creator"></span></div>
+          <div class="audit-info-row" x-show="catatan" style="margin-top:8px;font-style:italic" x-text="`📝 ${catatan}`"></div>
+        </div>
+
+        <form @submit.prevent="submit" autocomplete="off">
+          <div class="form-row">
+            <div class="field">
+              <label>Email <span style="color:red">*</span></label>
+              <input type="email" x-model="form.email" required :placeholder="emailHint || 'email@bpk.go.id'">
+              <div class="field-help" x-show="emailHint" style="font-size:11px;color:var(--c-emerald)">Sarankan: <span x-text="emailHint"></span></div>
+            </div>
+            <div class="field">
+              <label>Password <span style="color:red">*</span></label>
+              <input type="password" x-model="form.password" required minlength="6" placeholder="Min 6 karakter">
+            </div>
+          </div>
+
+          <div class="form-row cols-1">
+            <div class="field">
+              <label>Nama Lengkap <span style="color:red">*</span></label>
+              <input type="text" class="upper" x-model="form.nama" @input="J.upr($event, form, 'nama')" required placeholder="Nama Lengkap dengan Gelar">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label>NIP</label>
+              <input type="text" x-model="form.nip" placeholder="18 digit NIP" maxlength="18">
+            </div>
+            <div class="field">
+              <label>Jabatan</label>
+              <input type="text" class="upper" x-model="form.jabatan" @input="J.upr($event, form, 'jabatan')" placeholder="Contoh: Auditor Muda">
+            </div>
+          </div>
+
+          <div x-show="error" class="alert alert-error" x-text="error"></div>
+          <div x-show="success" class="alert alert-success" x-text="success"></div>
+
+          <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center" :disabled="submitting || success">
+            <span x-show="!submitting && !success">🎉 Daftar & Buat Akun</span>
+            <span x-show="submitting" class="loader"></span>
+            <span x-show="success">✅ Berhasil! Mengarahkan ke login...</span>
+          </button>
+        </form>
+
+        <div class="mt-4 center">
+          <a href="/admin/login" class="muted" style="font-size:12px">Sudah punya akun? Login →</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function signupPage() {
+      return {
+        loading: true,
+        token: '',
+        audit: null,
+        emailHint: '',
+        catatan: '',
+        creator: '',
+        inviteError: '',
+        form: { email: '', password: '', nama: '', nip: '', jabatan: '' },
+        submitting: false,
+        error: '',
+        success: '',
+        async init() {
+          const url = new URL(location);
+          this.token = url.searchParams.get('token');
+          if (!this.token) {
+            this.inviteError = 'Token undangan tidak ada di URL. Mintakan link undangan baru ke Super Admin.';
+            this.loading = false;
+            return;
+          }
+          try {
+            const r = await J.fetch(`/api/auth/sign-up/preview?token=${encodeURIComponent(this.token)}`);
+            this.audit = r.surat_tugas;
+            this.emailHint = r.email_hint || '';
+            this.catatan = r.catatan || '';
+            this.creator = r.creator || '';
+            if (this.emailHint) this.form.email = this.emailHint;
+          } catch (e) {
+            this.inviteError = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async submit() {
+          this.error = '';
+          this.submitting = true;
+          try {
+            await J.fetch('/api/auth/sign-up', { method: 'POST', body: { token: this.token, ...this.form } });
+            this.success = 'Akun berhasil dibuat!';
+            setTimeout(() => location.href = '/admin/login', 1500);
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.submitting = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Masuk Admin — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+  <style>
+    .login-shell { min-height: calc(100vh - 70px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .login-card { width: 100%; max-width: 420px; background: white; padding: 32px; border-radius: 12px; border: 1px solid var(--c-line); box-shadow: var(--shadow-md); }
+    .login-card h1 { font-size: 24px; margin-bottom: 4px; }
+    .login-card .crumb { color: var(--c-admin); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+    .login-card p.lead { color: var(--c-ink-soft); font-size: 13px; margin-bottom: 24px; }
+  </style>
+</head>
+<body x-data="adminLogin()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    </div>
+  </header>
+
+  <main class="login-shell">
+    <div class="login-card">
+      <div class="crumb">Auditor / Admin</div>
+      <h1>Masuk Sistem Audit</h1>
+      <p class="lead">Akses penuh untuk upload SP2D, kelola OPD, jalankan pengujian, dan ekspor kertas kerja.</p>
+
+      <form @submit.prevent="submit" autocomplete="off">
+        <div class="field mb-4">
+          <label>Email</label>
+          <input type="email" x-model="form.email" required autofocus placeholder="email@bpk.go.id">
+        </div>
+
+        <div class="field mb-4">
+          <label>Password</label>
+          <input type="password" x-model="form.password" required>
+        </div>
+
+        <div x-show="error" class="alert alert-error" x-text="error"></div>
+
+        <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center" :disabled="loading">
+          <span x-show="!loading">Masuk Auditor</span>
+          <span x-show="loading" class="loader"></span>
+        </button>
+      </form>
+
+      <div class="mt-4 center">
+        <a href="/" class="muted" style="font-size:12px">← Kembali ke beranda</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function adminLogin() {
+      return {
+        form: { email: '', password: '' },
+        loading: false,
+        error: '',
+        async submit() {
+          this.error = '';
+          this.loading = true;
+          try {
+            await J.fetch('/api/auth/admin/login', { method: 'POST', body: this.form });
+            location.href = '/admin/dashboard';
+          } catch (e) {
+            this.error = e.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

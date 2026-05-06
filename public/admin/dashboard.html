@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard Admin — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="adminDashboard()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+      <nav class="nav">
+        <a href="/admin/dashboard" class="active">Dashboard</a>
+        <a href="/admin/upload">Upload SP2D</a>
+        <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a>
+        <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+        <a href="/admin/pengaturan">Pengaturan</a>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="page-header">
+        <div class="page-title">
+          <span class="crumb">Dashboard</span>
+          <h1>Ringkasan Audit</h1>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary" @click="newOpd">+ Tambah OPD</button>
+          <a href="/admin/upload" class="btn">Upload SP2D</a>
+          <a href="/api/admin/backup" class="btn btn-sm">⬇ Backup DB</a>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-4 mb-4">
+        <div class="stat">
+          <div class="stat-label">Total OPD</div>
+          <div class="stat-value" x-text="J.number(totals.total_opd)"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Total Paket</div>
+          <div class="stat-value" x-text="J.number(totals.total_paket)"></div>
+          <div class="stat-sub" x-text="`${totals.total_audited || 0} terkunci`"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Total Nilai Kontrak</div>
+          <div class="stat-value money" x-text="J.rupiah(totals.total_nilai)" style="font-size:18px"></div>
+        </div>
+        <div class="stat" style="border-color:#fde68a;background:var(--c-amber-soft)">
+          <div class="stat-label" style="color:var(--c-amber)">Total Pengembalian</div>
+          <div class="stat-value money" x-text="J.rupiah(totals.total_pengembalian)" style="font-size:18px;color:var(--c-amber)"></div>
+        </div>
+      </div>
+
+      <!-- OPD Cards -->
+      <div class="card-header" style="border-bottom: none; padding: 0; margin-bottom: 12px;">
+        <div class="card-title">Daftar OPD</div>
+        <div class="muted" style="font-size:12px" x-text="`${opd.length} OPD terdaftar`"></div>
+      </div>
+
+      <div class="grid grid-3" x-show="opd.length > 0" style="gap:18px">
+        <template x-for="o in opd" :key="o.id">
+          <div class="card" style="padding:20px;cursor:pointer" @click="window.location.href='/admin/opd?id='+o.id">
+            <div class="flex items-center justify-between mb-4">
+              <span class="badge badge-navy" x-text="`${o.jml_paket} paket`"></span>
+              <span class="code" x-text="o.kode_akses" :title="'Klik untuk salin kode akses'" style="cursor:pointer" @click.stop="copyKode(o.kode_akses)"></span>
+            </div>
+            <h3 style="font-family:'Fraunces',serif;font-size:16px;font-weight:600;line-height:1.3;margin-bottom:12px;letter-spacing:-0.01em" x-text="o.nama"></h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+              <div>
+                <div style="font-size:11px;color:var(--c-ink-soft);font-weight:600;letter-spacing:0.04em;text-transform:uppercase">Nilai Paket</div>
+                <div class="money" style="font-size:14px;color:var(--c-ink);margin-top:2px" x-text="J.rupiah(o.total_nilai_paket)"></div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--c-amber);font-weight:600;letter-spacing:0.04em;text-transform:uppercase">Temuan</div>
+                <div class="money" style="font-size:14px;color:var(--c-amber);margin-top:2px" x-text="o.total_temuan > 0 ? J.rupiah(o.total_temuan) : '–'"></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mb-2" style="font-size:11px;color:var(--c-ink-soft)">
+              <span style="color:var(--c-emerald)">●</span> <span x-text="o.jml_lengkap"></span> lengkap
+              <span class="muted">·</span>
+              <span style="color:var(--c-slate)">●</span> <span x-text="o.jml_terkunci"></span> terkunci
+            </div>
+            <div style="background:var(--c-slate-soft);height:6px;border-radius:3px;overflow:hidden;margin-bottom:14px">
+              <div :style="`width:${o.jml_paket ? Math.round(o.jml_lengkap*100/o.jml_paket) : 0}%;height:100%;background:linear-gradient(90deg,var(--c-emerald),var(--c-admin));transition:width .3s`"></div>
+            </div>
+            <div class="flex gap-2">
+              <a :href="`/admin/opd?id=${o.id}`" class="btn btn-sm btn-primary flex-1" style="justify-content:center" @click.stop>Lihat Detail →</a>
+              <button class="btn btn-sm" @click.stop="regenKode(o)" title="Regenerate kode akses">↻</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div x-show="opd.length === 0 && !loading" class="empty-state">
+        <div class="empty-state-icon">📁</div>
+        <div class="empty-state-title">Belum ada OPD terdaftar</div>
+        <div class="empty-state-desc">Upload rekap SP2D Excel untuk auto-create OPD + paket, atau tambah manual.</div>
+        <div class="flex gap-2" style="justify-content:center;margin-top:16px">
+          <a href="/admin/upload" class="btn btn-primary">📤 Upload SP2D</a>
+          <button class="btn" @click="newOpd">+ Tambah OPD Manual</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function adminDashboard() {
+      return {
+        totals: {},
+        opd: [],
+        loading: true,
+        async init() {
+          try {
+            const data = await J.fetch('/api/admin/dashboard');
+            this.totals = data.totals;
+            this.opd = data.opd;
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          } finally {
+            this.loading = false;
+          }
+        },
+        async newOpd() {
+          const nama = prompt('Nama OPD:');
+          if (!nama) return;
+          try {
+            const r = await J.fetch('/api/admin/opd', { method: 'POST', body: { nama } });
+            J.toast(`OPD ditambahkan. Kode akses: ${r.kode_akses}`, 'success');
+            await this.init();
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        copyKode(kode) {
+          navigator.clipboard?.writeText(kode);
+          J.toast(`Kode "${kode}" disalin`, 'info');
+        },
+        async regenKode(o) {
+          if (!confirm(`Regenerate kode akses untuk ${o.nama}? Kode lama akan tidak berlaku.`)) return;
+          try {
+            const r = await J.fetch(`/api/admin/opd/${o.id}/regenerate-kode`, { method: 'POST' });
+            o.kode_akses = r.kode_akses;
+            J.toast(`Kode baru: ${r.kode_akses}`, 'success');
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

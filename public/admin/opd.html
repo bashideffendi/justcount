@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Detail OPD — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="opdDetail()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+      <nav class="nav">
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/upload">Upload SP2D</a>
+        <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a>
+        <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+        <a href="/admin/pengaturan">Pengaturan</a>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="page-header">
+        <div class="page-title">
+          <a href="/admin/dashboard" class="crumb">← Dashboard</a>
+          <h1 x-text="opd?.nama || 'Loading...'"></h1>
+          <div class="muted mt-2" x-show="opd">
+            Kode akses: <span class="code" x-text="opd?.kode_akses" @click="copyKode(opd.kode_akses)" style="cursor:pointer"></span>
+            <span class="muted">·</span>
+            <span x-text="paket.length"></span> paket
+          </div>
+        </div>
+        <div class="page-actions">
+          <input type="text" x-model="search" placeholder="Cari paket..." style="width:200px">
+          <select x-model="filterStatus">
+            <option value="">Semua status</option>
+            <option value="belum_diisi">Belum diisi</option>
+            <option value="draft">Draft</option>
+            <option value="lengkap">Lengkap</option>
+            <option value="terkunci">Terkunci</option>
+          </select>
+        </div>
+      </div>
+
+      <div x-show="loading" class="card center" style="padding:48px"><span class="loader"></span></div>
+
+      <div x-show="!loading && filteredPaket.length === 0" class="card center muted" style="padding:48px">
+        Tidak ada paket yang cocok dengan filter.
+      </div>
+
+      <div x-show="filteredPaket.length > 0" class="card" style="padding:0">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
+              <th style="width:30px">#</th>
+              <th>Nama Pekerjaan</th>
+              <th>Kode Paket</th>
+              <th class="num">SP2D</th>
+              <th class="num">Nilai Paket</th>
+              <th>Status</th>
+              <th class="num">Temuan</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(p, i) in filteredPaket" :key="p.id">
+              <tr :style="selected[p.id] ? 'background:var(--c-admin-soft)' : ''">
+                <td><input type="checkbox" :value="p.id" :checked="!!selected[p.id]" :disabled="p.status === 'terkunci'" @change="toggleOne(p)"></td>
+                <td x-text="i+1"></td>
+                <td style="max-width:380px">
+                  <strong x-text="p.nama_pekerjaan"></strong>
+                  <div class="muted" style="font-size:11px" x-text="`TA ${p.tahun_anggaran || '-'}${p.jenis_konsultansi ? ' · ' + J.jenisKonsultansi(p.jenis_konsultansi) : ''}${p.jenis_kontrak ? ' · ' + J.jenisKontrak(p.jenis_kontrak) : ''}`"></div>
+                </td>
+                <td><span class="code" style="font-size:11px" x-text="p.nomor_paket || '—'"></span></td>
+                <td class="num" x-text="p.jml_sp2d || 0"></td>
+                <td class="num money" x-text="J.rupiah(p.nilai_paket)"></td>
+                <td>
+                  <span class="badge" :class="`badge-${J.statusBadge(p.status).color}`" x-text="J.statusBadge(p.status).label"></span>
+                </td>
+                <td class="num money" :style="p.total_temuan > 0 ? 'color:var(--c-amber)' : 'color:var(--c-ink-soft)'" x-text="p.total_temuan > 0 ? J.rupiah(p.total_temuan) : '-'"></td>
+                <td class="actions">
+                  <a :href="`/admin/paket?id=${p.id}`" class="btn btn-sm btn-primary">Detail →</a>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sticky bulk action bar -->
+      <div x-show="selectedCount > 0" x-transition
+        style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:100;background:var(--c-ink);color:white;padding:14px 20px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;gap:16px;align-items:center;min-width:480px">
+        <div>
+          <strong x-text="`${selectedCount} paket dipilih`"></strong>
+          <div style="font-size:12px;opacity:.7" x-text="`Total: ${J.rupiah(selectedTotalNilai)}`"></div>
+        </div>
+        <div class="flex-1"></div>
+        <button class="btn btn-primary" @click="openBulkMerge" :disabled="selectedCount < 2">
+          🔗 Gabung (<span x-text="selectedCount"></span> paket)
+        </button>
+        <button class="btn btn-ghost" @click="clearSelection" style="color:white">Batal</button>
+      </div>
+
+      <!-- Bulk merge modal -->
+      <div x-show="bulkMergeOpen" x-cloak
+        style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:1000;overflow-y:auto;padding:5vh 20px"
+        @click.self="bulkMergeOpen = false">
+        <div class="card" style="max-width:600px;width:100%;margin:0 auto">
+          <div class="card-header">
+            <div class="card-title">Gabung Paket</div>
+            <button class="btn btn-sm btn-ghost" @click="bulkMergeOpen = false">×</button>
+          </div>
+          <p class="muted mb-4" style="font-size:13px">
+            <strong x-text="selectedCount"></strong> paket akan digabung jadi 1 paket.
+            Total nilai: <strong x-text="J.rupiah(selectedTotalNilai)"></strong>.
+            Pilih paket mana yang jadi <strong>induk</strong> (yang lain di-merge ke sini, terus dihapus).
+          </p>
+
+          <div class="field mb-4">
+            <label>Paket Induk (Target)</label>
+            <select x-model.number="targetId">
+              <template x-for="p in selectedPakets" :key="p.id">
+                <option :value="p.id" x-text="`${p.nama_pekerjaan.slice(0, 60)}${p.nama_pekerjaan.length > 60 ? '…' : ''} — Rp ${(p.nilai_paket||0).toLocaleString('id-ID')}`"></option>
+              </template>
+            </select>
+          </div>
+
+          <div class="field mb-4">
+            <label>Nama Pekerjaan Paket Hasil Gabungan (opsional override)</label>
+            <input type="text" class="upper" x-model="namaBaru" placeholder="Kosongkan jika tetap pakai nama paket induk">
+            <div class="field-help" style="font-size:11px">Kalau diisi, nama pekerjaan paket induk akan diganti dengan ini.</div>
+          </div>
+
+          <div class="alert alert-warn">
+            <strong>Perhatian:</strong> Paket lain (selain induk) akan <strong>dihapus</strong>. SP2D-nya pindah ke paket induk. Aksi ini tidak bisa di-undo.
+          </div>
+
+          <div class="flex gap-2 mt-4">
+            <button class="btn" @click="bulkMergeOpen = false">Batal</button>
+            <div class="flex-1"></div>
+            <button class="btn btn-primary" @click="doBulkMerge" :disabled="!targetId || merging">
+              <span x-show="!merging">Gabung Sekarang</span>
+              <span x-show="merging" class="loader"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const JENIS_LABEL = { perencanaan: 'Perencanaan', pengawasan: 'Pengawasan', gabungan: 'Perencanaan + Pengawasan', non_konstruksi: 'Non-Konstruksi' };
+    function opdDetail() {
+      return {
+        opdId: null,
+        opd: null,
+        paket: [],
+        loading: true,
+        search: '',
+        filterStatus: '',
+        selected: {}, // { paket_id: true }
+        bulkMergeOpen: false,
+        targetId: null,
+        namaBaru: '',
+        merging: false,
+        labelJenis(j) { return JENIS_LABEL[j] || j || '-'; },
+        get selectedPakets() {
+          return this.paket.filter(p => this.selected[p.id]);
+        },
+        get selectedCount() { return this.selectedPakets.length; },
+        get selectedTotalNilai() { return this.selectedPakets.reduce((s, p) => s + (p.nilai_paket || 0), 0); },
+        get allSelected() {
+          const eligible = this.filteredPaket.filter(p => p.status !== 'terkunci');
+          return eligible.length > 0 && eligible.every(p => this.selected[p.id]);
+        },
+        toggleOne(p) {
+          if (this.selected[p.id]) delete this.selected[p.id];
+          else this.selected[p.id] = true;
+        },
+        toggleAll() {
+          const eligible = this.filteredPaket.filter(p => p.status !== 'terkunci');
+          if (this.allSelected) {
+            for (const p of eligible) delete this.selected[p.id];
+          } else {
+            for (const p of eligible) this.selected[p.id] = true;
+          }
+        },
+        clearSelection() { this.selected = {}; },
+        openBulkMerge() {
+          if (this.selectedCount < 2) return;
+          // default: pilih paket dengan SP2D paling banyak (atau paket pertama)
+          const sorted = [...this.selectedPakets].sort((a, b) => (b.jml_sp2d || 0) - (a.jml_sp2d || 0) || a.id - b.id);
+          this.targetId = sorted[0].id;
+          this.namaBaru = '';
+          this.bulkMergeOpen = true;
+        },
+        async doBulkMerge() {
+          if (!this.targetId) return;
+          const sourceIds = this.selectedPakets.filter(p => p.id !== this.targetId).map(p => p.id);
+          if (sourceIds.length === 0) { J.toast('Pilih minimal 2 paket', 'warn'); return; }
+          this.merging = true;
+          try {
+            await J.fetch('/api/admin/paket/bulk-merge', {
+              method: 'POST',
+              body: { target_id: this.targetId, source_ids: sourceIds, nama_pekerjaan: this.namaBaru || null },
+            });
+            J.toast(`${sourceIds.length} paket digabung ke 1 paket induk`, 'success');
+            this.bulkMergeOpen = false;
+            this.clearSelection();
+            await this.init();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.merging = false; }
+        },
+        get filteredPaket() {
+          return this.paket.filter(p => {
+            const s = this.search.toLowerCase();
+            const matchSearch = !s || p.nama_pekerjaan.toLowerCase().includes(s) || (p.no_sp2d || '').toLowerCase().includes(s);
+            const matchStatus = !this.filterStatus || p.status === this.filterStatus;
+            return matchSearch && matchStatus;
+          });
+        },
+        async init() {
+          const url = new URL(location);
+          this.opdId = parseInt(url.searchParams.get('id'), 10);
+          if (!this.opdId) { location.href = '/admin/dashboard'; return; }
+          try {
+            const data = await J.fetch(`/api/admin/opd/${this.opdId}`);
+            this.opd = data.opd;
+            this.paket = data.paket;
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          } finally {
+            this.loading = false;
+          }
+        },
+        copyKode(k) { navigator.clipboard?.writeText(k); J.toast(`Kode "${k}" disalin`); },
+      };
+    }
+  </script>
+</body>
+</html>

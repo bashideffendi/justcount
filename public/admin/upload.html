@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Upload SP2D — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+  <style>
+    .drop-zone {
+      border: 2px dashed var(--c-line-strong);
+      border-radius: 10px;
+      padding: 48px 24px;
+      text-align: center;
+      transition: all .15s;
+      background: var(--c-slate-soft);
+    }
+    .drop-zone.dragging { border-color: var(--c-admin); background: var(--c-admin-soft); }
+    .drop-zone input[type=file] { display: none; }
+  </style>
+</head>
+<body x-data="uploadPage()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+      <nav class="nav">
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/upload" class="active">Upload SP2D</a>
+        <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a>
+        <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+        <a href="/admin/pengaturan">Pengaturan</a>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container-narrow">
+      <div class="page-header">
+        <div class="page-title">
+          <a href="/admin/dashboard" class="crumb">← Dashboard</a>
+          <h1>Upload Rekap SP2D</h1>
+        </div>
+      </div>
+
+      <div class="alert alert-info">
+        <strong>Format Excel:</strong> Sheet pertama, header di baris 1. Kolom wajib:
+        <strong>Nama OPD</strong>, <strong>Nama Pekerjaan</strong>, <strong>Nomor SP2D</strong>, <strong>Nilai Paket</strong>, <strong>Tahun Anggaran</strong>.
+        <br>OPD baru akan otomatis dibuat dengan kode akses unik. Paket duplikat (no SP2D sama) akan dilewat.
+      </div>
+
+      <div class="card">
+        <form @submit.prevent="submit">
+          <div class="drop-zone" :class="{ dragging }"
+               @dragover.prevent="dragging=true"
+               @dragleave.prevent="dragging=false"
+               @drop.prevent="handleDrop($event)"
+               @click="$refs.fileInput.click()"
+               style="cursor:pointer">
+            <input type="file" x-ref="fileInput" accept=".xlsx,.xls" @change="handleFile($event.target.files[0])">
+            <div x-show="!file">
+              <h3 style="font-family:'Fraunces',serif;margin-bottom:8px">Tarik file Excel ke sini</h3>
+              <p class="muted">atau klik untuk pilih file (.xlsx)</p>
+            </div>
+            <div x-show="file" style="text-align:center">
+              <div style="font-size:32px;margin-bottom:8px">📄</div>
+              <strong x-text="file?.name"></strong>
+              <div class="muted" style="font-size:12px;margin-top:4px" x-text="file ? `${(file.size/1024).toFixed(1)} KB` : ''"></div>
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary" :disabled="!file || uploading">
+              <span x-show="!uploading">Upload & Parse</span>
+              <span x-show="uploading" class="loader"></span>
+            </button>
+            <button type="button" class="btn" @click="resetFile" :disabled="uploading">Reset</button>
+            <div class="flex-1"></div>
+            <button type="button" class="btn" @click="seedDummy" :disabled="uploading">🧪 Seed Data Dummy (testing)</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Hasil -->
+      <div x-show="result" class="card mt-4">
+        <div class="card-header">
+          <div class="card-title">Hasil Import</div>
+        </div>
+
+        <div class="grid grid-3 mb-4">
+          <div class="stat">
+            <div class="stat-label">OPD Baru</div>
+            <div class="stat-value" x-text="result?.summary?.opd_baru?.length || 0"></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Paket Baru</div>
+            <div class="stat-value" x-text="result?.summary?.paket_baru || 0"></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Dilewat</div>
+            <div class="stat-value" x-text="result?.summary?.dilewat?.length || 0"></div>
+          </div>
+        </div>
+
+        <div x-show="result?.summary?.opd_baru?.length > 0" class="mb-4">
+          <h3 style="font-size:14px;margin-bottom:8px">OPD Baru — Kode Akses</h3>
+          <table class="data">
+            <thead><tr><th>Nama OPD</th><th>Kode Akses</th></tr></thead>
+            <tbody>
+              <template x-for="o in result?.summary?.opd_baru || []" :key="o.id">
+                <tr>
+                  <td x-text="o.nama"></td>
+                  <td><span class="code" x-text="o.kode_akses" style="cursor:pointer" @click="J.toast(`Kode '${o.kode_akses}' disalin`); navigator.clipboard?.writeText(o.kode_akses)"></span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <p class="muted mt-2" style="font-size:12px">Klik kode akses untuk salin. Kirim ke OPD via WA/email manual.</p>
+        </div>
+
+        <div x-show="result?.summary?.dilewat?.length > 0" class="mb-2">
+          <h3 style="font-size:14px;margin-bottom:8px">Dilewat (duplikat / invalid)</h3>
+          <ul class="muted" style="font-size:12px">
+            <template x-for="d in result?.summary?.dilewat || []">
+              <li>Baris <strong x-text="d.baris"></strong>: <span x-text="d.no_sp2d || ''"></span> — <span x-text="d.alasan"></span></li>
+            </template>
+          </ul>
+        </div>
+
+        <div x-show="result?.summary?.error?.length > 0" class="alert alert-warn">
+          <strong>Error parsing:</strong>
+          <ul style="margin:4px 0 0 16px">
+            <template x-for="e in result?.summary?.error || []">
+              <li>Baris <strong x-text="e.baris"></strong>: <span x-text="e.alasan"></span></li>
+            </template>
+          </ul>
+        </div>
+
+        <div class="mt-4">
+          <a href="/admin/dashboard" class="btn btn-primary">Ke Dashboard</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function uploadPage() {
+      return {
+        file: null,
+        dragging: false,
+        uploading: false,
+        result: null,
+        handleFile(f) {
+          if (!f) return;
+          if (!/\.xlsx?$/i.test(f.name)) { J.toast('File harus .xlsx atau .xls', 'error'); return; }
+          this.file = f;
+        },
+        handleDrop(e) {
+          this.dragging = false;
+          this.handleFile(e.dataTransfer.files[0]);
+        },
+        resetFile() {
+          this.file = null;
+          this.result = null;
+          this.$refs.fileInput.value = '';
+        },
+        async submit() {
+          if (!this.file) return;
+          const fd = new FormData();
+          fd.append('file', this.file);
+          this.uploading = true;
+          this.result = null;
+          try {
+            const r = await fetch('/api/upload/sp2d', { method: 'POST', body: fd, credentials: 'same-origin' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || 'Gagal');
+            this.result = data;
+            J.toast(`Berhasil import ${data.summary.paket_baru} paket`, 'success');
+          } catch (e) {
+            J.toast(e.message, 'error');
+          } finally {
+            this.uploading = false;
+          }
+        },
+        async seedDummy() {
+          if (!confirm('Generate data dummy 5 OPD × 3-5 paket untuk testing?')) return;
+          this.uploading = true;
+          try {
+            const r = await J.fetch('/api/upload/seed-dummy', { method: 'POST' });
+            J.toast(`Dummy: ${r.opd} OPD baru, ${r.paket} paket, ${r.ta} TA`, 'success');
+            setTimeout(() => location.href = '/admin/dashboard', 1000);
+          } catch (e) {
+            J.toast(e.message, 'error');
+          } finally {
+            this.uploading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

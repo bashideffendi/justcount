@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Surat Tugas — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="suratTugasPage()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a>
+      <a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas" class="active">Surat Tugas</a>
+      <a href="/admin/berita-acara">Berita Acara</a>
+      <a href="/admin/temuan-lintas">Temuan Lintas</a>
+      <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+      <a href="/admin/pengaturan">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container">
+    <div class="page-header">
+      <div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Surat Tugas Pemeriksaan</h1></div>
+      <div class="page-actions">
+        <button class="btn btn-primary" @click="newSurat">+ Tambah Surat Tugas</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      Daftar surat tugas pemeriksaan BPK. Setiap Berita Acara Permintaan Keterangan (BAPK) akan merefer ke salah satu surat tugas. Aktifkan satu surat tugas sebagai default untuk pengisian BA berikutnya.
+    </div>
+
+    <div x-show="!editing && list.length > 0">
+      <template x-for="s in list" :key="s.id">
+        <div class="list-card" :style="`border-left:4px solid ${aktifId === s.id ? 'var(--c-admin)' : 'var(--c-line-strong)'}; ${aktifId === s.id ? 'background:linear-gradient(to right, var(--c-admin-soft), white 30%);' : ''}`">
+          <div style="flex-shrink:0;width:48px;height:48px;border-radius:10px;background:var(--c-admin-soft);display:flex;align-items:center;justify-content:center;font-size:22px">📋</div>
+          <div class="list-card-main">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="badge badge-navy" x-show="aktifId === s.id">⭐ AKTIF</span>
+              <span class="code" style="font-size:11px" x-text="s.nomor"></span>
+            </div>
+            <div class="list-card-title" x-text="s.nama_pemeriksaan"></div>
+            <div class="list-card-meta">
+              <span x-text="s.bpk_perwakilan"></span>
+              <span class="muted" x-show="s.entitas_diperiksa">·</span>
+              <span x-show="s.entitas_diperiksa" x-text="s.entitas_diperiksa"></span>
+            </div>
+            <div class="list-card-meta mt-2">
+              <span x-text="J.date(s.tanggal)"></span>
+              <span class="muted">·</span>
+              <span><strong x-text="s.jml_pemeriksa || 0"></strong> pemeriksa</span>
+            </div>
+          </div>
+          <div class="list-card-actions">
+            <span class="badge" :class="`badge-${s.status === 'aktif' ? 'emerald' : (s.status === 'selesai' ? 'slate' : 'amber')}`" x-text="s.status"></span>
+            <button class="btn btn-sm" @click="aktifkan(s)" x-show="aktifId !== s.id" title="Jadikan surat tugas aktif">⭐ Aktifkan</button>
+            <button class="btn btn-sm btn-primary" @click="edit(s)">Edit</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="!editing && list.length === 0" class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">Belum ada Surat Tugas</div>
+      <div class="empty-state-desc">Buat Surat Tugas pertama dulu, lalu tambah tim pemeriksa, sebelum mulai mengisi BAPK.</div>
+    </div>
+
+    <!-- Edit form -->
+    <div x-show="editing" class="card">
+      <div class="card-header">
+        <div class="card-title" x-text="form.id ? 'Edit Surat Tugas' : 'Tambah Surat Tugas Baru'"></div>
+        <button class="btn btn-sm btn-ghost" @click="editing = false">× Tutup</button>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Nomor Surat Tugas <span style="color:red">*</span></label>
+          <input type="text" class="upper" x-model="form.nomor" @input="J.upr($event, form, 'nomor')" placeholder="Contoh: 12/ST/XVIII.SBY/01/2025">
+        </div>
+        <div class="field">
+          <label>Tanggal Surat Tugas <span style="color:red">*</span></label>
+          <input type="date" x-model="form.tanggal">
+        </div>
+      </div>
+
+      <div class="form-row cols-1">
+        <div class="field">
+          <label>BPK Perwakilan <span style="color:red">*</span></label>
+          <select x-model="form.bpk_perwakilan" @change="autoFillPerwakilan">
+            <option value="">— Pilih dari daftar (auto-fill alamat) atau ketik manual —</option>
+            <template x-for="p in perwakilanMaster" :key="p.nama">
+              <option :value="p.nama" x-text="p.nama"></option>
+            </template>
+          </select>
+          <input type="text" class="upper mt-2" x-model="form.bpk_perwakilan" @input="J.upr($event, form, 'bpk_perwakilan')" placeholder="Atau ketik manual nama BPK Perwakilan">
+        </div>
+      </div>
+
+      <div class="form-row cols-1">
+        <div class="field">
+          <label>Alamat Perwakilan <span class="muted" style="font-weight:normal">(untuk kop surat BAPK)</span></label>
+          <textarea x-model="form.alamat_perwakilan" rows="2" placeholder="Contoh: Jl. Raya Ir. H. Juanda, Semawalang, Semambung, Kec. Gedangan, Kabupaten Sidoarjo, Jawa Timur 61254" style="resize:vertical"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>Telepon</label>
+          <input type="text" x-model="form.telepon" placeholder="(031) 8669244">
+        </div>
+        <div class="field">
+          <label>Fax</label>
+          <input type="text" x-model="form.fax" placeholder="(031) 8669206">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="text" x-model="form.email" placeholder="surabaya@bpk.go.id">
+        </div>
+      </div>
+      <div class="form-row cols-1">
+        <div class="field">
+          <label>Website</label>
+          <input type="text" x-model="form.website" placeholder="surabaya.bpk.go.id">
+        </div>
+      </div>
+
+      <div class="form-row cols-1">
+        <div class="field">
+          <label>Nama Pemeriksaan <span style="color:red">*</span></label>
+          <input type="text" class="upper" x-model="form.nama_pemeriksaan" @input="J.upr($event, form, 'nama_pemeriksaan')" placeholder="Contoh: Pemeriksaan Kepatuhan Pengadaan Jasa Konsultansi Konstruksi TA 2025">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Entitas Diperiksa</label>
+          <input type="text" class="upper" x-model="form.entitas_diperiksa" @input="J.upr($event, form, 'entitas_diperiksa')" placeholder="Contoh: Pemerintah Kabupaten Sampang">
+        </div>
+        <div class="field">
+          <label>Tahun Anggaran Target</label>
+          <input type="number" x-model.number="form.tahun_anggaran_target" placeholder="2025">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Periode Audit Mulai</label>
+          <input type="date" x-model="form.periode_audit_mulai">
+        </div>
+        <div class="field">
+          <label>Periode Audit Selesai</label>
+          <input type="date" x-model="form.periode_audit_selesai">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="max-width:200px">
+          <label>Status</label>
+          <select x-model="form.status">
+            <option value="draft">Draft</option>
+            <option value="aktif">Aktif</option>
+            <option value="selesai">Selesai</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1">
+          <label>Keterangan</label>
+          <input type="text" x-model="form.keterangan" placeholder="Catatan tambahan (opsional)">
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          <span x-show="!saving">💾 Simpan</span>
+          <span x-show="saving" class="loader"></span>
+        </button>
+        <button class="btn" @click="editing = false">Batal</button>
+        <div class="flex-1"></div>
+        <button x-show="form.id" class="btn btn-danger" @click="del">🗑 Hapus</button>
+      </div>
+
+      <!-- Pemeriksa section (only when editing existing) -->
+      <div x-show="form.id" style="margin-top:32px;border-top:1px solid var(--c-line);padding-top:24px">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 style="font-size:18px;margin:0">Tim Pemeriksa</h2>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">Daftar pemeriksa yang ditugaskan dalam surat tugas ini.</p>
+          </div>
+          <button class="btn btn-sm btn-primary" @click="addPemeriksa">+ Tambah Pemeriksa</button>
+        </div>
+
+        <table class="data editable" x-show="pemeriksa.length > 0">
+          <thead><tr><th style="width:30px">#</th><th>Nama</th><th>NIP</th><th>Jabatan</th><th>Peran</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="(p, i) in pemeriksa" :key="p.id || p._uid">
+              <tr>
+                <td x-text="i+1"></td>
+                <td><input type="text" class="upper" x-model="p.nama" @input="J.upr($event, p, 'nama'); savePemeriksa(p)" placeholder="Nama Lengkap"></td>
+                <td><input type="text" x-model="p.nip" @input="savePemeriksa(p)" placeholder="NIP" maxlength="18"></td>
+                <td><input type="text" class="upper" x-model="p.jabatan" @input="J.upr($event, p, 'jabatan'); savePemeriksa(p)" placeholder="Contoh: Auditor Muda"></td>
+                <td>
+                  <select x-model="p.peran" @change="savePemeriksa(p)">
+                    <option value="">— Pilih —</option>
+                    <option value="Penanggung Jawab">Penanggung Jawab</option>
+                    <option value="Wakil Penanggung Jawab">Wakil Penanggung Jawab</option>
+                    <option value="Pengendali Teknis">Pengendali Teknis</option>
+                    <option value="Ketua Tim">Ketua Tim</option>
+                    <option value="Anggota">Anggota</option>
+                  </select>
+                </td>
+                <td><button class="btn btn-sm btn-ghost" @click="delPemeriksa(p, i)" style="color:var(--c-red)">×</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="pemeriksa.length === 0" class="muted center" style="padding:24px">Belum ada pemeriksa. Klik "+ Tambah Pemeriksa".</div>
+      </div>
+    </div>
+  </div></main>
+
+  <script>
+    function suratTugasPage() {
+      return {
+        list: [],
+        aktifId: null,
+        editing: false,
+        form: {},
+        pemeriksa: [],
+        saving: false,
+        debouncers: {},
+        perwakilanMaster: [],
+        async init() {
+          await this.load();
+          try { this.perwakilanMaster = await J.fetch('/api/admin/bpk-perwakilan/master'); } catch {}
+        },
+        autoFillPerwakilan() {
+          const p = this.perwakilanMaster.find(x => x.nama === this.form.bpk_perwakilan);
+          if (p) {
+            this.form.alamat_perwakilan = p.alamat;
+            this.form.telepon = p.telepon || '';
+            this.form.fax = p.fax || '';
+            this.form.website = p.website || '';
+          }
+        },
+        async load() {
+          try {
+            const r = await J.fetch('/api/admin/surat-tugas');
+            this.list = r.list;
+            this.aktifId = r.aktif_id;
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          }
+        },
+        newSurat() {
+          this.form = { status: 'aktif' };
+          this.pemeriksa = [];
+          this.editing = true;
+        },
+        async edit(s) {
+          try {
+            const data = await J.fetch(`/api/admin/surat-tugas/${s.id}`);
+            this.form = { ...data.surat };
+            this.pemeriksa = data.pemeriksa || [];
+            this.editing = true;
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async save() {
+          this.saving = true;
+          try {
+            if (this.form.id) {
+              await J.fetch(`/api/admin/surat-tugas/${this.form.id}`, { method: 'PUT', body: this.form });
+              J.toast('Tersimpan', 'success');
+            } else {
+              const r = await J.fetch('/api/admin/surat-tugas', { method: 'POST', body: this.form });
+              this.form.id = r.id;
+              J.toast('Surat tugas dibuat. Sekarang isi tim pemeriksa di bawah.', 'success');
+            }
+            await this.load();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.saving = false; }
+        },
+        async aktifkan(s) {
+          try { await J.fetch(`/api/admin/surat-tugas/${s.id}/aktifkan`, { method: 'POST' }); this.aktifId = s.id; J.toast('Surat tugas diaktifkan', 'success'); }
+          catch (e) { J.toast(e.message, 'error'); }
+        },
+        async del() {
+          if (!confirm('Hapus surat tugas ini? Semua pemeriksa & BA terkait akan ikut terhapus.')) return;
+          try { await J.fetch(`/api/admin/surat-tugas/${this.form.id}`, { method: 'DELETE' }); this.editing = false; await this.load(); J.toast('Dihapus', 'success'); }
+          catch (e) { J.toast(e.message, 'error'); }
+        },
+        addPemeriksa() {
+          this.pemeriksa.push({ _uid: 'tmp_' + Math.random(), id: null, nama: '', nip: '', jabatan: '', peran: '', urutan: this.pemeriksa.length });
+        },
+        savePemeriksa(p) {
+          if (!p.nama) return;
+          const key = 'pemeriksa_' + (p.id || p._uid);
+          if (!this.debouncers[key]) this.debouncers[key] = J.debounce(async () => {
+            try {
+              const body = { nama: p.nama, nip: p.nip, jabatan: p.jabatan, peran: p.peran, urutan: p.urutan };
+              if (p.id) await J.fetch(`/api/admin/pemeriksa/${p.id}`, { method: 'PUT', body });
+              else { const r = await J.fetch(`/api/admin/surat-tugas/${this.form.id}/pemeriksa`, { method: 'POST', body }); p.id = r.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          }, 600);
+          this.debouncers[key]();
+        },
+        async delPemeriksa(p, i) {
+          if (!confirm(`Hapus pemeriksa "${p.nama || 'baris ' + (i+1)}"?`)) return;
+          if (p.id) await J.fetch(`/api/admin/pemeriksa/${p.id}`, { method: 'DELETE' });
+          this.pemeriksa.splice(i, 1);
+        },
+      };
+    }
+  </script>
+</body>
+</html>

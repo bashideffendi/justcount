@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: jaskon-audit
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    disk:
+      name: data
+      mountPath: /opt/render/project/src
+      sizeGB: 1
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SKA_API_URL
+        value: https://cek-sertifikat-keahlian.up.railway.app
+      - key: SKA_CACHE_TTL_DAYS
+        value: 30

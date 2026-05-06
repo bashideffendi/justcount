@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard OPD — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="opdDashboard()">
+  <header class="topbar opd">
+    <div class="container topbar-row">
+      <div class="brand">Just Count <span class="brand-tag" x-text="opd ? opd.nama : 'OPD'"></span></div>
+      <div class="flex items-center gap-4">
+        <span class="muted" style="font-size:12px" x-show="opd">Login sebagai <strong x-text="opd?.nama"></strong></span>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('opd')">Keluar</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="page-header">
+        <div class="page-title">
+          <span class="crumb">SKPD / OPD</span>
+          <h1>Daftar Paket Konsultansi</h1>
+        </div>
+        <div class="page-actions">
+          <span class="badge badge-emerald" x-text="`${stats.lengkap}/${stats.total} lengkap`"></span>
+        </div>
+      </div>
+
+      <div x-show="paket.length === 0 && !loading" class="card center muted" style="padding:48px">
+        Belum ada paket terdaftar untuk OPD ini. Hubungi auditor.
+      </div>
+
+      <div x-show="loading" class="card center" style="padding:48px"><span class="loader"></span></div>
+
+      <div x-show="paket.length > 0" class="card" style="padding:0">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width:32px"><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
+              <th style="width:30px">#</th>
+              <th>Nama Pekerjaan</th>
+              <th>Kode Paket</th>
+              <th class="num">SP2D</th>
+              <th class="num">Nilai Paket</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(p, i) in paket" :key="p.id">
+              <tr :style="selected[p.id] ? 'background:var(--c-opd-soft)' : ''">
+                <td><input type="checkbox" :value="p.id" :checked="!!selected[p.id]" :disabled="!isEditable(p.status)" @change="toggleOne(p)"></td>
+                <td x-text="i+1"></td>
+                <td>
+                  <strong x-text="p.nama_pekerjaan"></strong>
+                  <div class="muted" style="font-size:12px" x-text="`TA ${p.tahun_anggaran || '-'}${p.jml_ta ? ' · ' + p.jml_ta + ' TA' : ''}`"></div>
+                </td>
+                <td><span class="code" style="font-size:11px" x-text="p.nomor_paket || '—'"></span></td>
+                <td class="num" x-text="p.jml_sp2d || 0"></td>
+                <td class="num money" x-text="J.rupiah(p.nilai_paket)"></td>
+                <td>
+                  <span class="badge" :class="`badge-${J.statusBadge(p.status).color}`" x-text="J.statusBadge(p.status).label"></span>
+                </td>
+                <td class="actions">
+                  <a :href="`/opd/paket?id=${p.id}`" class="btn btn-sm btn-opd">
+                    <span x-text="p.status === 'terkunci' ? 'Lihat' : (p.status === 'belum_diisi' ? 'Mulai Isi' : 'Lanjut Isi')"></span>
+                  </a>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sticky bulk action bar (OPD) -->
+      <div x-show="selectedCount > 0" x-cloak
+        style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:100;background:var(--c-ink);color:white;padding:14px 20px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;gap:16px;align-items:center;min-width:480px">
+        <div>
+          <strong x-text="`${selectedCount} paket dipilih`"></strong>
+          <div style="font-size:12px;opacity:.7" x-text="`Total: ${J.rupiah(selectedTotalNilai)}`"></div>
+        </div>
+        <div class="flex-1"></div>
+        <button class="btn btn-opd" @click="openBulkMerge" :disabled="selectedCount < 2">
+          🔗 Gabung (<span x-text="selectedCount"></span> paket)
+        </button>
+        <button class="btn btn-ghost" @click="clearSelection" style="color:white">Batal</button>
+      </div>
+
+      <!-- Bulk merge modal -->
+      <div x-show="bulkMergeOpen" x-cloak
+        style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:1000;overflow-y:auto;padding:5vh 20px"
+        @click.self="bulkMergeOpen = false">
+        <div class="card" style="max-width:600px;width:100%;margin:0 auto">
+          <div class="card-header">
+            <div class="card-title">Gabung Paket</div>
+            <button class="btn btn-sm btn-ghost" @click="bulkMergeOpen = false">×</button>
+          </div>
+          <p class="muted mb-4" style="font-size:13px">
+            <strong x-text="selectedCount"></strong> paket akan digabung jadi 1 paket.
+            Total nilai: <strong x-text="J.rupiah(selectedTotalNilai)"></strong>.
+            Pilih paket mana yang jadi <strong>induk</strong> (yang lain di-merge ke sini, terus dihapus).
+          </p>
+
+          <div class="field mb-4">
+            <label>Paket Induk (Target)</label>
+            <select x-model.number="targetId">
+              <template x-for="p in selectedPakets" :key="p.id">
+                <option :value="p.id" x-text="`${p.nama_pekerjaan.slice(0, 60)}${p.nama_pekerjaan.length > 60 ? '…' : ''} — Rp ${(p.nilai_paket||0).toLocaleString('id-ID')}`"></option>
+              </template>
+            </select>
+          </div>
+
+          <div class="field mb-4">
+            <label>Nama Pekerjaan Paket Hasil Gabungan (opsional)</label>
+            <input type="text" class="upper" x-model="namaBaru" placeholder="Kosongkan jika tetap pakai nama paket induk">
+            <div class="field-help" style="font-size:11px">Kalau diisi, nama pekerjaan paket induk akan diganti dengan ini.</div>
+          </div>
+
+          <div class="alert alert-warn">
+            <strong>Perhatian:</strong> Paket lain (selain induk) akan <strong>dihapus</strong>. SP2D-nya pindah ke paket induk. Aksi ini tidak bisa di-undo.
+          </div>
+
+          <div class="flex gap-2 mt-4">
+            <button class="btn" @click="bulkMergeOpen = false">Batal</button>
+            <div class="flex-1"></div>
+            <button class="btn btn-opd" @click="doBulkMerge" :disabled="!targetId || merging">
+              <span x-show="!merging">Gabung Sekarang</span>
+              <span x-show="merging" class="loader"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info mt-4">
+        <strong>Catatan:</strong> Sistem auto-save setiap perubahan. Setelah semua field terisi lengkap, klik "Submit Final" di halaman paket untuk menandai siap diaudit. Setelah dikunci auditor, data tidak bisa diedit lagi.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const EDITABLE_STATUS = new Set(['belum_diisi', 'draft']);
+    function opdDashboard() {
+      return {
+        opd: null,
+        paket: [],
+        loading: true,
+        selected: {},
+        bulkMergeOpen: false,
+        targetId: null,
+        namaBaru: '',
+        merging: false,
+        isEditable(status) { return EDITABLE_STATUS.has(status); },
+        get stats() {
+          return {
+            total: this.paket.length,
+            lengkap: this.paket.filter(p => p.status === 'lengkap' || p.status === 'terkunci').length,
+          };
+        },
+        get selectedPakets() { return this.paket.filter(p => this.selected[p.id]); },
+        get selectedCount() { return this.selectedPakets.length; },
+        get selectedTotalNilai() { return this.selectedPakets.reduce((s, p) => s + (p.nilai_paket || 0), 0); },
+        get allSelected() {
+          const eligible = this.paket.filter(p => this.isEditable(p.status));
+          return eligible.length > 0 && eligible.every(p => this.selected[p.id]);
+        },
+        toggleOne(p) {
+          if (this.selected[p.id]) delete this.selected[p.id];
+          else this.selected[p.id] = true;
+        },
+        toggleAll() {
+          const eligible = this.paket.filter(p => this.isEditable(p.status));
+          if (this.allSelected) {
+            for (const p of eligible) delete this.selected[p.id];
+          } else {
+            for (const p of eligible) this.selected[p.id] = true;
+          }
+        },
+        clearSelection() { this.selected = {}; },
+        openBulkMerge() {
+          if (this.selectedCount < 2) return;
+          const sorted = [...this.selectedPakets].sort((a, b) => (b.jml_sp2d || 0) - (a.jml_sp2d || 0) || a.id - b.id);
+          this.targetId = sorted[0].id;
+          this.namaBaru = '';
+          this.bulkMergeOpen = true;
+        },
+        async doBulkMerge() {
+          if (!this.targetId) return;
+          const sourceIds = this.selectedPakets.filter(p => p.id !== this.targetId).map(p => p.id);
+          if (sourceIds.length === 0) { J.toast('Pilih minimal 2 paket', 'warn'); return; }
+          this.merging = true;
+          try {
+            await J.fetch('/api/opd/paket/bulk-merge', {
+              method: 'POST',
+              body: { target_id: this.targetId, source_ids: sourceIds, nama_pekerjaan: this.namaBaru || null },
+            });
+            J.toast(`${sourceIds.length} paket digabung ke 1 paket induk`, 'success');
+            this.bulkMergeOpen = false;
+            this.clearSelection();
+            await this.init();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.merging = false; }
+        },
+        async init() {
+          try {
+            const data = await J.fetch('/api/opd/dashboard');
+            this.opd = data.opd;
+            this.paket = data.paket;
+          } catch (e) {
+            if (e.status === 401) { location.href = '/opd'; return; }
+            J.toast(e.message, 'error');
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

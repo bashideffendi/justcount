@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Berita Acara — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="baPage()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a>
+      <a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas">Surat Tugas</a>
+      <a href="/admin/berita-acara" class="active">Berita Acara</a>
+      <a href="/admin/temuan-lintas">Temuan Lintas</a>
+      <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+      <a href="/admin/pengaturan">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container">
+    <div class="page-header">
+      <div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Berita Acara Permintaan Keterangan (BAPK)</h1></div>
+      <div class="page-actions">
+        <button class="btn btn-primary" @click="newBA" :disabled="suratTugasList.length === 0">+ Tambah BAPK</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      Berita Acara Permintaan Keterangan dipakai untuk dokumentasi formal wawancara tim pemeriksa BPK dengan pihak terkait (PPK, PPTK, Penyedia, dst). Setiap BAPK terhubung ke 1 Surat Tugas. Output: file Word (.docx) sesuai format BPK Perwakilan.
+    </div>
+
+    <div x-show="suratTugasList.length === 0" class="alert alert-warn">
+      Belum ada Surat Tugas. <a href="/admin/surat-tugas">Buat Surat Tugas dulu</a> sebelum menambah BAPK.
+    </div>
+
+    <!-- LIST: card-based (lebih scannable dari tabel) -->
+    <div x-show="!editing && list.length > 0">
+      <template x-for="b in list" :key="b.id">
+        <div class="list-card" :style="`border-left:4px solid ${b.status === 'final' ? 'var(--c-emerald)' : 'var(--c-amber)'}`">
+          <div style="flex-shrink:0;width:48px;height:48px;border-radius:10px;background:var(--c-admin-soft);display:flex;align-items:center;justify-content:center;font-size:22px">📜</div>
+          <div class="list-card-main">
+            <div class="list-card-title" x-text="b.pemberi_nama"></div>
+            <div class="list-card-meta">
+              <span><strong x-text="b.pemberi_jabatan || '-'"></strong></span>
+              <span class="muted">·</span>
+              <span x-text="b.pemberi_skpd || ''"></span>
+              <span class="muted" x-show="b.nama_penyedia">·</span>
+              <span x-show="b.nama_penyedia" x-text="b.nama_penyedia"></span>
+            </div>
+            <div class="list-card-meta mt-2">
+              <span class="code" style="font-size:10px" x-text="b.nomor || 'No. belum diisi'"></span>
+              <span class="muted">·</span>
+              <span x-text="J.date(b.tanggal)"></span>
+              <span class="muted" x-show="b.paket_nama">·</span>
+              <span x-show="b.paket_nama" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="b.paket_nama" x-text="b.paket_nama?.slice(0, 60) + (b.paket_nama?.length > 60 ? '…' : '')"></span>
+            </div>
+          </div>
+          <div class="list-card-actions">
+            <span class="badge" :class="`badge-${b.status === 'final' ? 'emerald' : 'amber'}`" x-text="b.status"></span>
+            <a :href="`/api/admin/berita-acara/${b.id}/download`" class="btn btn-sm" title="Download Word .docx">📥 DOCX</a>
+            <button class="btn btn-sm btn-primary" @click="edit(b)">Edit</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="!editing && list.length === 0 && suratTugasList.length > 0" class="empty-state">
+      <div class="empty-state-icon">📜</div>
+      <div class="empty-state-title">Belum ada BAPK</div>
+      <div class="empty-state-desc">Klik "+ Tambah BAPK" untuk mulai, atau generate dari Tab "Hasil Audit" di detail paket.</div>
+    </div>
+
+    <!-- FORM -->
+    <div x-show="editing" class="card">
+      <div class="card-header">
+        <div class="card-title" x-text="form.id ? 'Edit BAPK' : 'Tambah BAPK Baru'"></div>
+        <button class="btn btn-sm btn-ghost" @click="editing = false">× Tutup</button>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Surat Tugas <span style="color:red">*</span></label>
+          <select x-model.number="form.surat_tugas_id" @change="loadPemeriksa">
+            <option value="">— Pilih Surat Tugas —</option>
+            <template x-for="s in suratTugasList" :key="s.id">
+              <option :value="s.id" x-text="`${s.nomor} (${J.date(s.tanggal)})`"></option>
+            </template>
+          </select>
+        </div>
+        <div class="field">
+          <label>Paket Terkait (opsional)</label>
+          <select x-model.number="form.paket_id">
+            <option value="">— Tidak terikat paket spesifik —</option>
+            <template x-for="p in paketList" :key="p.id">
+              <option :value="p.id" x-text="p.nama_pekerjaan?.slice(0, 80)"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>Nomor BAPK</label>
+          <input type="text" x-model="form.nomor" placeholder="Contoh: 03/BAPK/PUPR/2025">
+        </div>
+        <div class="field">
+          <label>Hari</label>
+          <input type="text" class="upper" x-model="form.hari" @input="J.upr($event, form, 'hari')" placeholder="Senin">
+        </div>
+        <div class="field">
+          <label>Tanggal BAPK <span style="color:red">*</span></label>
+          <input type="date" x-model="form.tanggal" @change="autoFillHari">
+        </div>
+      </div>
+
+      <h3 style="font-size:14px;margin:24px 0 8px;color:var(--c-admin)">Identitas Pemberi Keterangan</h3>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Nama <span style="color:red">*</span></label>
+          <input type="text" class="upper" x-model="form.pemberi_nama" @input="J.upr($event, form, 'pemberi_nama')" placeholder="Nama Lengkap Pemberi Keterangan">
+        </div>
+        <div class="field">
+          <label>NIP (opsional)</label>
+          <input type="text" x-model="form.pemberi_nip" placeholder="NIP" maxlength="18">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Jabatan</label>
+          <input type="text" class="upper" x-model="form.pemberi_jabatan" @input="J.upr($event, form, 'pemberi_jabatan')" placeholder="Contoh: PPK / PPTK / Direktur CV ...">
+        </div>
+        <div class="field">
+          <label>SKPD / OPD</label>
+          <input type="text" class="upper" x-model="form.pemberi_skpd" @input="J.upr($event, form, 'pemberi_skpd')" placeholder="Contoh: DINAS PUPR">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Nomor Kontak</label>
+          <input type="text" x-model="form.pemberi_nomor_kontak" placeholder="Contoh: 0812-xxxx-xxxx">
+        </div>
+        <div class="field">
+          <label>Nama Penyedia (jika BA terkait paket)</label>
+          <input type="text" class="upper" x-model="form.nama_penyedia" @input="J.upr($event, form, 'nama_penyedia')" placeholder="Contoh: CV BINTANG MAS">
+        </div>
+      </div>
+
+      <h3 style="font-size:14px;margin:24px 0 8px;color:var(--c-admin)">Hasil Permintaan Keterangan</h3>
+
+      <div class="alert alert-info" style="font-size:12px">
+        <strong>💡 Tips:</strong> Hasil keterangan bisa <strong>auto-generated dari hasil audit paket</strong> (3 area checklist + temuan numerik). Klik tombol di bawah untuk regenerate. Auditor tinggal review, pemberi keterangan tinggal isi jawaban di area "Jawaban Saudara".
+      </div>
+
+      <div class="flex gap-2 mb-2">
+        <button class="btn btn-sm" @click="autoGenerate" :disabled="!form.paket_id || autoGenerating" title="Auto-isi dari hasil audit paket">
+          <span x-show="!autoGenerating">🪄 Auto-Generate dari Audit</span>
+          <span x-show="autoGenerating" class="loader"></span>
+        </button>
+        <span class="muted" style="font-size:11px;align-self:center" x-show="!form.paket_id">(pilih paket terkait dulu)</span>
+      </div>
+
+      <div class="field">
+        <label>Hasil Wawancara / Q&amp;A</label>
+        <textarea x-model="form.hasil_keterangan" rows="20" placeholder="Tuliskan hasil permintaan keterangan dalam bentuk narasi atau Q&amp;A.&#10;Contoh:&#10;Tanya: ...&#10;Jawab: ...&#10;&#10;Atau klik tombol '🪄 Auto-Generate dari Audit' untuk auto-isi dari hasil pengujian paket." style="resize:vertical;font-family:'JetBrains Mono','Consolas',monospace;font-size:12px;line-height:1.5"></textarea>
+      </div>
+
+      <h3 style="font-size:14px;margin:24px 0 8px;color:var(--c-admin)">Tanda Tangan</h3>
+      <p class="muted" style="font-size:12px;margin-bottom:12px">2 pemeriksa BPK (dari surat tugas), PPK + PPTK + Penyedia (input manual). Pemberi Keterangan otomatis pakai data di atas.</p>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Pemeriksa BPK 1</label>
+          <select x-model.number="form.pemeriksa_1_id">
+            <option value="">— Pilih dari Tim Pemeriksa —</option>
+            <template x-for="p in pemeriksaList" :key="p.id">
+              <option :value="p.id" x-text="`${p.nama} ${p.peran ? '(' + p.peran + ')' : ''}`"></option>
+            </template>
+          </select>
+        </div>
+        <div class="field">
+          <label>Pemeriksa BPK 2</label>
+          <select x-model.number="form.pemeriksa_2_id">
+            <option value="">— Pilih dari Tim Pemeriksa —</option>
+            <template x-for="p in pemeriksaList" :key="p.id">
+              <option :value="p.id" x-text="`${p.nama} ${p.peran ? '(' + p.peran + ')' : ''}`"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>Nama PPK</label>
+          <input type="text" class="upper" x-model="form.ppk_nama" @input="J.upr($event, form, 'ppk_nama')" placeholder="Nama PPK">
+        </div>
+        <div class="field">
+          <label>NIP PPK</label>
+          <input type="text" x-model="form.ppk_nip" placeholder="NIP" maxlength="18">
+        </div>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>Nama PPTK</label>
+          <input type="text" class="upper" x-model="form.pptk_nama" @input="J.upr($event, form, 'pptk_nama')" placeholder="Nama PPTK">
+        </div>
+        <div class="field">
+          <label>NIP PPTK</label>
+          <input type="text" x-model="form.pptk_nip" placeholder="NIP" maxlength="18">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Nama Penyedia (perwakilan TT)</label>
+          <input type="text" class="upper" x-model="form.penyedia_rep_nama" @input="J.upr($event, form, 'penyedia_rep_nama')" placeholder="Nama penanda tangan dari penyedia">
+        </div>
+        <div class="field" style="max-width:200px">
+          <label>Status</label>
+          <select x-model="form.status">
+            <option value="draft">Draft</option>
+            <option value="final">Final</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          <span x-show="!saving">💾 Simpan</span>
+          <span x-show="saving" class="loader"></span>
+        </button>
+        <button class="btn" @click="editing = false">Batal</button>
+        <a x-show="form.id" :href="`/api/admin/berita-acara/${form.id}/download`" class="btn">📥 Download DOCX</a>
+        <div class="flex-1"></div>
+        <button x-show="form.id" class="btn btn-danger" @click="del">🗑 Hapus</button>
+      </div>
+    </div>
+  </div></main>
+
+  <script>
+    const HARI_ID = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    function baPage() {
+      return {
+        list: [],
+        suratTugasList: [],
+        paketList: [],
+        pemeriksaList: [],
+        editing: false,
+        form: {},
+        saving: false,
+        autoGenerating: false,
+        async autoGenerate() {
+          if (!this.form.paket_id) { J.toast('Pilih paket terkait dulu', 'warn'); return; }
+          if (this.form.hasil_keterangan && !confirm('Hasil keterangan saat ini akan diganti dengan auto-generated. Lanjutkan?')) return;
+          this.autoGenerating = true;
+          try {
+            const r = await J.fetch('/api/admin/berita-acara/auto-generate', { method: 'POST', body: { paket_id: this.form.paket_id }});
+            this.form.hasil_keterangan = r.hasil_keterangan;
+            J.toast('Hasil keterangan auto-generated dari audit. Review & sesuaikan.', 'success');
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.autoGenerating = false; }
+        },
+        async init() {
+          try {
+            const [list, st, paketResp] = await Promise.all([
+              J.fetch('/api/admin/berita-acara'),
+              J.fetch('/api/admin/surat-tugas'),
+              J.fetch('/api/admin/dashboard'),
+            ]);
+            this.list = list;
+            this.suratTugasList = st.list;
+            // Aggregate paket from all OPDs (simplified — just use top-level)
+            const opds = paketResp.opd || [];
+            this.paketList = [];
+            for (const opd of opds) {
+              try {
+                const detail = await J.fetch(`/api/admin/opd/${opd.id}`);
+                this.paketList.push(...detail.paket.map(p => ({ id: p.id, nama_pekerjaan: `${opd.nama.slice(0,30)} — ${p.nama_pekerjaan?.slice(0, 60)}` })));
+              } catch {}
+            }
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          }
+          // Auto-open edit kalau URL ada ?edit=ID
+          const url = new URL(location);
+          const editId = url.searchParams.get('edit');
+          if (editId) {
+            const ba = this.list.find(b => b.id === parseInt(editId, 10));
+            if (ba) await this.edit(ba);
+          }
+        },
+        async newBA() {
+          // Default ke surat tugas aktif kalau ada
+          const st = await J.fetch('/api/admin/surat-tugas');
+          this.form = {
+            surat_tugas_id: st.aktif_id || (this.suratTugasList[0]?.id || null),
+            tanggal: new Date().toISOString().slice(0, 10),
+            status: 'draft',
+          };
+          this.autoFillHari();
+          if (this.form.surat_tugas_id) await this.loadPemeriksa();
+          this.editing = true;
+        },
+        async edit(b) {
+          try {
+            this.form = await J.fetch(`/api/admin/berita-acara/${b.id}`);
+            await this.loadPemeriksa();
+            this.editing = true;
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        autoFillHari() {
+          if (this.form.tanggal && !this.form.hari) {
+            const d = new Date(this.form.tanggal + 'T00:00:00');
+            this.form.hari = HARI_ID[d.getDay()];
+          }
+        },
+        async loadPemeriksa() {
+          if (!this.form.surat_tugas_id) { this.pemeriksaList = []; return; }
+          try {
+            const data = await J.fetch(`/api/admin/surat-tugas/${this.form.surat_tugas_id}`);
+            this.pemeriksaList = data.pemeriksa || [];
+          } catch (e) { this.pemeriksaList = []; }
+        },
+        async save() {
+          this.saving = true;
+          try {
+            if (this.form.id) {
+              await J.fetch(`/api/admin/berita-acara/${this.form.id}`, { method: 'PUT', body: this.form });
+              J.toast('Tersimpan', 'success');
+            } else {
+              const r = await J.fetch('/api/admin/berita-acara', { method: 'POST', body: this.form });
+              this.form.id = r.id;
+              J.toast('BAPK dibuat. Klik Download DOCX untuk export.', 'success');
+            }
+            await this.init();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.saving = false; }
+        },
+        async del() {
+          if (!confirm('Hapus BAPK ini?')) return;
+          try { await J.fetch(`/api/admin/berita-acara/${this.form.id}`, { method: 'DELETE' }); this.editing = false; await this.init(); J.toast('Dihapus', 'success'); }
+          catch (e) { J.toast(e.message, 'error'); }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

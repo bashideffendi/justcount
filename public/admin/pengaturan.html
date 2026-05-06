@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pengaturan — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="pengaturanPage()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a><a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a><a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+      <a href="/admin/pengaturan" class="active">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container-narrow">
+    <div class="page-header"><div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Pengaturan Sistem</h1></div></div>
+
+    <div class="card">
+      <div class="form-row cols-1">
+        <template x-for="s in settings" :key="s.key">
+          <div class="field">
+            <label x-text="s.key.replace(/_/g,' ').toUpperCase()"></label>
+            <template x-if="s.key === 'sumber_tarif_aktif'">
+              <select x-model="s.value" @change="save(s)">
+                <option value="inkindo">INKINDO (Pedoman Standar Minimum)</option>
+                <option value="pemda">Pemda (Pergub/Perbup SBU)</option>
+              </select>
+            </template>
+            <template x-if="s.key !== 'sumber_tarif_aktif'">
+              <input type="text" x-model="s.value" @input="save(s)">
+            </template>
+            <div class="field-help" x-text="s.description"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div></main>
+
+  <script>
+    function pengaturanPage() {
+      return {
+        settings: [],
+        debouncers: {},
+        async init() {
+          try { this.settings = await J.fetch('/api/admin/pengaturan'); }
+          catch (e) { if (e.status === 401) location.href = '/admin/login'; }
+        },
+        save(s) {
+          if (!this.debouncers[s.key]) this.debouncers[s.key] = J.debounce(async () => {
+            try { await J.fetch(`/api/admin/pengaturan/${s.key}`, { method: 'PUT', body: { value: s.value } }); J.toast('Tersimpan', 'success'); }
+            catch (e) { J.toast(e.message, 'error'); }
+          }, 600);
+          this.debouncers[s.key]();
+        },
+      };
+    }
+  </script>
+</body>
+</html>

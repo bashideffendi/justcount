@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Temuan Lintas Paket — Just Count</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+</head>
+<body x-data="lintas()">
+  <header class="topbar admin"><div class="container topbar-row">
+    <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+    <nav class="nav">
+      <a href="/admin/dashboard">Dashboard</a><a href="/admin/upload">Upload SP2D</a>
+      <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas" class="active">Temuan Lintas</a><a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+      <a href="/admin/pengaturan">Pengaturan</a>
+      <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+    </nav>
+  </div></header>
+
+  <main><div class="container">
+    <div class="page-header">
+      <div class="page-title"><a href="/admin/dashboard" class="crumb">← Dashboard</a><h1>Temuan Lintas Paket</h1></div>
+      <div class="page-actions">
+        <button class="btn btn-primary" @click="recompute" :disabled="computing">
+          <span x-show="!computing">↻ Hitung Ulang</span>
+          <span x-show="computing" class="loader"></span>
+        </button>
+        <a href="/api/export/rekap" class="btn">📥 Export Rekap Excel</a>
+      </div>
+    </div>
+
+    <div class="alert alert-info">Lintas paket cuma jalan untuk paket yang sudah <strong>terkunci</strong> (sudah di-audit). Pastikan paket relevan sudah di-lock dulu.</div>
+
+    <div class="tabs">
+      <button class="tab" :class="tab==='tt' && 'active'" @click="tab='tt'">Tumpang Tindih (Uji 1)</button>
+      <button class="tab" :class="tab==='ls' && 'active'" @click="tab='ls'">Lumpsum &gt; Batas (Uji 2)</button>
+    </div>
+
+    <div x-show="tab==='tt'" class="card" style="padding:0">
+      <table class="data" x-show="data.tumpang_tindih?.length > 0">
+        <thead><tr><th>NIK</th><th>Nama</th><th>Paket A</th><th>Paket B</th><th>Periode Overlap</th><th class="num">Hari</th></tr></thead>
+        <tbody>
+          <template x-for="t in data.tumpang_tindih || []">
+            <tr>
+              <td><span class="code" x-text="t.nik"></span></td>
+              <td x-text="t.nama"></td>
+              <td><div x-text="t.paket_a_nama"></div><div class="muted" style="font-size:11px" x-text="t.opd_a"></div></td>
+              <td><div x-text="t.paket_b_nama"></div><div class="muted" style="font-size:11px" x-text="t.opd_b"></div></td>
+              <td x-text="`${J.date(t.overlap_start)} – ${J.date(t.overlap_end)}`"></td>
+              <td class="num" x-text="t.hari_overlap"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div x-show="!data.tumpang_tindih?.length" class="muted center" style="padding:48px">
+        Belum ada temuan tumpang tindih. Atau klik "Hitung Ulang".
+      </div>
+    </div>
+
+    <div x-show="tab==='ls'" class="card" style="padding:0">
+      <table class="data" x-show="data.lumpsum?.length > 0">
+        <thead><tr><th>NIK</th><th>Nama</th><th>Periode Pelanggaran</th><th class="num">Jml Paket Overlap</th><th>Daftar Paket</th></tr></thead>
+        <tbody>
+          <template x-for="l in data.lumpsum || []">
+            <tr>
+              <td><span class="code" x-text="l.nik"></span></td>
+              <td x-text="l.nama"></td>
+              <td x-text="`${J.date(l.mulai_pelanggaran)} – ${J.date(l.selesai_pelanggaran)}`"></td>
+              <td class="num" x-text="l.jumlah_paket_overlap"></td>
+              <td>
+                <ul style="margin:0;padding-left:16px;font-size:12px">
+                  <template x-for="p in l.daftar_paket || []">
+                    <li><span x-text="p.nama"></span> <span class="muted" x-text="`(${p.opd})`"></span></li>
+                  </template>
+                </ul>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div x-show="!data.lumpsum?.length" class="muted center" style="padding:48px">
+        Belum ada pelanggaran batas lumpsum. Atau klik "Hitung Ulang".
+      </div>
+    </div>
+  </div></main>
+
+  <script>
+    function lintas() {
+      return {
+        tab: 'tt',
+        data: { tumpang_tindih: [], lumpsum: [] },
+        computing: false,
+        async init() { await this.load(); },
+        async load() {
+          try { this.data = await J.fetch('/api/audit/lintas'); }
+          catch (e) { if (e.status === 401) location.href = '/admin/login'; }
+        },
+        async recompute() {
+          this.computing = true;
+          try { await J.fetch('/api/audit/lintas/recompute', { method: 'POST' }); J.toast('Hitung ulang selesai', 'success'); await this.load(); }
+          catch (e) { J.toast(e.message, 'error'); }
+          finally { this.computing = false; }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

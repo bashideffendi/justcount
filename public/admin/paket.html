@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Detail Paket — Just Count Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/assets/app.js"></script>
+  <style>
+    .row-input { padding: 5px 8px; font-size: 13px; }
+    .row-input:disabled { background: transparent; border-color: transparent; padding: 5px 8px; }
+    table.editable input, table.editable select { padding: 5px 8px; font-size: 13px; min-width: 0; width: 100%; }
+    table.editable td { padding: 4px 6px; }
+    .ta-section { background: var(--c-slate-soft); padding: 12px; border-radius: 8px; margin-bottom: 8px; }
+  </style>
+</head>
+<body x-data="paketAdmin()">
+  <header class="topbar admin">
+    <div class="container topbar-row">
+      <a href="/admin/dashboard" class="brand">Just Count <span class="brand-tag">ADMIN</span></a>
+      <nav class="nav">
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/upload">Upload SP2D</a>
+        <a href="/admin/surat-tugas">Surat Tugas</a>
+        <a href="/admin/berita-acara">Berita Acara</a>
+        <a href="/admin/temuan-lintas">Temuan Lintas</a>
+        <a href="/admin/sbu">Master SBU</a>
+      <a href="/admin/users">Auditor</a>
+        <a href="/admin/pengaturan">Pengaturan</a>
+        <button class="btn btn-ghost btn-sm" @click="J.logout('admin')">Keluar</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="page-header">
+        <div class="page-title">
+          <a :href="data?.paket ? `/admin/opd?id=${data.paket.opd_id}` : '/admin/dashboard'" class="crumb" x-text="data?.paket?.opd_nama ? `← ${data.paket.opd_nama}` : '← Dashboard'"></a>
+          <h1 x-text="data?.paket?.nama_pekerjaan || 'Loading...'"></h1>
+          <div class="muted mt-2" x-show="data?.paket" style="font-size:12px">
+            <span x-show="data?.paket?.nomor_paket">Kode: <span class="code" x-text="data?.paket?.nomor_paket"></span> ·</span>
+            <span class="money" x-text="J.rupiah(data?.paket?.nilai_paket)"></span>
+            <span class="muted">·</span>
+            <span x-text="`${data?.sp2d?.length || 0} SP2D`"></span>
+            <span class="muted">·</span>
+            TA <span x-text="data?.paket?.tahun_anggaran || '-'"></span>
+            <span class="muted">·</span>
+            <span x-text="J.jenisKonsultansi(data?.paket?.jenis_konsultansi)"></span>
+            <span class="muted" x-show="data?.paket?.jenis_kontrak">·</span>
+            <span x-show="data?.paket?.jenis_kontrak" x-text="J.jenisKontrak(data?.paket?.jenis_kontrak)"></span>
+          </div>
+          <div class="muted mt-2" x-show="data?.paket?.nama_penyedia" style="font-size:12px">
+            <strong>Penyedia:</strong>
+            <span x-text="data?.paket?.bentuk_badan || ''"></span> <span x-text="data?.paket?.nama_penyedia"></span>
+          </div>
+        </div>
+        <div class="page-actions">
+          <span class="badge" :class="`badge-${J.statusBadge(data?.paket?.status || 'belum_diisi').color}`" x-text="J.statusBadge(data?.paket?.status || 'belum_diisi').label"></span>
+          <a :href="`/api/export/paket/${paketId}`" class="btn">📥 Export Excel</a>
+          <button class="btn" @click="unlock" x-show="data?.paket?.status === 'terkunci'" :disabled="unlocking" title="Kembalikan ke status 'lengkap' agar OPD bisa edit lagi">
+            <span x-show="!unlocking">🔓 Buka Kunci</span>
+            <span x-show="unlocking" class="loader"></span>
+          </button>
+          <button class="btn btn-primary" @click="lockAndAudit" :disabled="data?.paket?.status === 'belum_diisi' || locking">
+            <span x-show="!locking && data?.paket?.status !== 'terkunci'">🔒 Kunci & Audit</span>
+            <span x-show="!locking && data?.paket?.status === 'terkunci'">🔄 Audit Ulang</span>
+            <span x-show="locking" class="loader"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab" :class="tab==='kontrak' && 'active'" @click="tab='kontrak'">Data Kontrak</button>
+        <button class="tab" :class="tab==='perencanaan' && 'active'" @click="tab='perencanaan'">
+          📋 Audit Perencanaan
+          <span class="badge badge-slate" style="margin-left:6px;font-size:10px" x-text="checklistBadge('perencanaan')"></span>
+        </button>
+        <button class="tab" :class="tab==='biaya' && 'active'" @click="tab='biaya'">Rincian Biaya</button>
+        <button class="tab" :class="tab==='verifikasi' && 'active'" @click="tab='verifikasi'">
+          ⚙ Audit Pelaksanaan
+          <span class="badge badge-slate" style="margin-left:6px;font-size:10px" x-text="checklistBadge('pelaksanaan')"></span>
+        </button>
+        <button class="tab" :class="tab==='pelaporan' && 'active'" @click="tab='pelaporan'">
+          📑 Audit Pelaporan
+          <span class="badge badge-slate" style="margin-left:6px;font-size:10px" x-text="checklistBadge('pelaporan')"></span>
+        </button>
+        <button class="tab" :class="tab==='hasil' && 'active'" @click="tab='hasil'">📊 Hasil Audit</button>
+      </div>
+
+      <!-- ========================================
+           CHECKLIST AREA RENDERER (reused 3x)
+           ======================================== -->
+      <template x-for="area in ['perencanaan','pelaksanaan','pelaporan']" :key="area">
+        <div x-show="(tab === 'perencanaan' && area === 'perencanaan') || (tab === 'verifikasi' && area === 'pelaksanaan') || (tab === 'pelaporan' && area === 'pelaporan')">
+
+          <!-- Area Section Wrapper -->
+          <div class="area-section" :class="area">
+            <div class="area-section-title" x-text="area === 'perencanaan' ? '📋 Audit Perencanaan' : (area === 'pelaksanaan' ? '⚙ Audit Pelaksanaan' : '📑 Audit Pelaporan')"></div>
+            <div class="area-section-subtitle" x-text="area === 'perencanaan' ? 'Pengujian kepatuhan tahap perencanaan kontrak (KAK, HPS, RAB, jenis kontrak, remunerasi)' : (area === 'pelaksanaan' ? 'Pengujian kepatuhan pelaksanaan kontrak (mobilisasi, substitusi TA, pembayaran, adendum)' : 'Pengujian kepatuhan tahap pelaporan & penyelesaian kontrak (BAST, rekonsiliasi, penilaian kinerja)')"></div>
+
+            <!-- Stats strip -->
+            <div class="summary-strip" :style="`border-top:3px solid ${areaColor(area)}`">
+              <div class="summary-strip-item">
+                <div class="summary-strip-label">✅ Patuh / Total</div>
+                <div class="summary-strip-value">
+                  <span x-text="summaryByArea(area).patuh"></span>
+                  <span class="muted" style="font-size:18px;font-weight:400"> / <span x-text="summaryByArea(area).total_items"></span></span>
+                </div>
+              </div>
+              <div class="summary-strip-item">
+                <div class="summary-strip-label" style="color:var(--c-amber)">⚠ Lemah / Risiko</div>
+                <div class="summary-strip-value" style="color:var(--c-amber)" x-text="summaryByArea(area).lemah"></div>
+              </div>
+              <div class="summary-strip-item">
+                <div class="summary-strip-label" style="color:var(--c-red)">❌ Tidak Patuh</div>
+                <div class="summary-strip-value" style="color:var(--c-red)" x-text="summaryByArea(area).tidak_patuh"></div>
+              </div>
+              <div class="summary-strip-item">
+                <div class="summary-strip-label" style="color:var(--c-amber)">💰 Dampak Rupiah</div>
+                <div class="summary-strip-value money" style="font-size:18px;color:var(--c-amber)" x-text="J.rupiah(summaryByArea(area).total_dampak)"></div>
+              </div>
+            </div>
+
+            <!-- Item list -->
+            <template x-for="item in checklistByArea(area)" :key="item.item_id">
+              <div class="cl-item" :class="item.status || ''">
+                <div class="cl-head">
+                  <span class="cl-code" x-text="item.kode"></span>
+                  <div class="cl-title" x-text="item.judul"></div>
+                  <span class="cl-status-pill" :class="item.status || 'empty'" x-text="item.status ? statusLabel(item.status) : '— Belum Dinilai'"></span>
+                </div>
+                <div class="cl-fokus" x-text="item.fokus_uji"></div>
+
+                <details class="mt-2">
+                  <summary class="cl-detail-toggle">📎 Lihat detail (bukti minimum, indikator patuh, red flag)</summary>
+                  <div class="cl-detail-box">
+                    <div><strong>📂 Bukti minimum:</strong> <span x-text="item.bukti_minimum"></span></div>
+                    <div class="mt-2"><strong style="color:var(--c-emerald)">✅ Indikator patuh:</strong> <span x-text="item.indikator_patuh"></span></div>
+                    <div class="mt-2"><strong style="color:var(--c-red)">🚩 Red flag:</strong> <span x-text="item.red_flag"></span></div>
+                  </div>
+                </details>
+
+                <div class="cl-meta">
+                  <strong>📜 Dasar hukum:</strong> <span x-text="item.dasar_hukum"></span>
+                </div>
+
+                <div class="cl-input-grid">
+                  <div class="field">
+                    <label>Status Penilaian</label>
+                    <select x-model="item.status" @change="saveChecklist(item)">
+                      <option value="">— Belum Dinilai —</option>
+                      <option value="patuh">✅ Patuh</option>
+                      <option value="lemah">⚠ Lemah / Risiko</option>
+                      <option value="tidak_patuh">❌ Tidak Patuh</option>
+                      <option value="na">⊘ N/A (Tidak Relevan)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Lokasi / Referensi Bukti</label>
+                    <input type="text" x-model="item.lokasi_bukti" @input="saveChecklist(item)" placeholder="Contoh: Folder Audit/2025/PUPR/KAK.pdf">
+                  </div>
+                  <div class="field">
+                    <label>Dampak Rupiah (opsional)</label>
+                    <input type="number" x-model.number="item.dampak_pengembalian" @input="saveChecklist(item)" placeholder="0" :disabled="item.status === 'patuh' || item.status === 'na'">
+                  </div>
+                </div>
+
+                <div class="field mt-2">
+                  <label>📝 Catatan Auditor</label>
+                  <textarea x-model="item.catatan" @input="saveChecklist(item)" rows="2" placeholder="Penjelasan, temuan detail, rekomendasi, dst." style="resize:vertical"></textarea>
+                </div>
+              </div>
+            </template>
+          </div>
+
+        </div>
+      </template>
+
+      <!-- TAB 1: KONTRAK (read-only) -->
+      <div x-show="tab==='kontrak'">
+        <!-- SP2D List + Manage -->
+        <div class="card mb-4" style="background:var(--c-slate-soft);border-style:dashed">
+          <div class="card-header" style="border-bottom:1px solid var(--c-line);padding-bottom:12px;margin-bottom:12px">
+            <div>
+              <div class="card-title" style="font-size:14px">Daftar SP2D Paket Ini <span class="muted" style="font-size:11px;font-weight:normal">(<span x-text="data?.sp2d?.length || 0"></span> SP2D, Total: <span class="money" x-text="J.rupiah(data?.paket?.nilai_paket)"></span>)</span></div>
+              <div class="muted mt-2" style="font-size:11px" x-show="data?.paket?.nomor_paket">Kode Paket: <span class="code" x-text="data?.paket?.nomor_paket"></span></div>
+            </div>
+            <button class="btn btn-sm" @click="openMergeModal" :disabled="data?.paket?.status === 'terkunci'">🔗 Gabung dari Paket Lain</button>
+          </div>
+          <table class="data" x-show="data?.sp2d?.length > 0">
+            <thead>
+              <tr>
+                <th>No SP2D</th>
+                <th>Tanggal</th>
+                <th class="num">Nilai</th>
+                <th>Penerima (di SP2D)</th>
+                <th>Keterangan</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="s in data?.sp2d || []" :key="s.id">
+                <tr>
+                  <td><span class="code" style="font-size:10px" x-text="s.no_sp2d"></span></td>
+                  <td style="font-size:12px" x-text="J.date(s.tanggal_sp2d)"></td>
+                  <td class="num money" x-text="J.rupiah(s.nilai_sp2d)"></td>
+                  <td style="max-width:200px;font-size:11px" x-text="s.nama_penerima || '-'"></td>
+                  <td style="max-width:300px;font-size:11px" x-text="s.keterangan || '-'"></td>
+                  <td class="actions">
+                    <button class="btn btn-sm btn-ghost" @click="splitSp2d(s)" :disabled="data?.sp2d?.length <= 1 || data?.paket?.status === 'terkunci'" title="Pisahkan SP2D ini ke paket sendiri">✂ Pisah</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="muted mt-2" style="font-size:11px">
+            <strong>Catatan:</strong> Kalau 1 paket konsultan dibayar lewat beberapa SP2D (uang muka, termin, retensi), pastikan kolom <strong>Nomor Paket</strong> di Excel diisi sama. Atau gabung manual via tombol di atas. Pisah SP2D jika ada yang salah dikelompokkan.
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Data Paket & Kontrak <span class="muted" style="font-size:11px;font-weight:normal">(editable — admin bisa benerin input OPD)</span></div>
+            </div>
+            <button class="btn btn-sm" @click="editName" title="Edit nama pekerjaan paket">✏ Edit Nama Pekerjaan</button>
+          </div>
+          <div class="form-row cols-1">
+            <div class="field">
+              <label>Nama Pekerjaan</label>
+              <div x-text="data?.paket?.nama_pekerjaan || '-'" style="font-weight:600;padding:8px 0"></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Nomor Kontrak</label>
+              <input type="text" class="upper" x-model="data.paket.no_kontrak" @input="J.upr($event, data.paket, 'no_kontrak'); saveKontrak()" placeholder="Contoh: 600/123/KTR/2025">
+            </div>
+            <div class="field">
+              <label>Tanggal Kontrak</label>
+              <input type="date" x-model="data.paket.tanggal_kontrak" @change="saveKontrak">
+            </div>
+          </div>
+          <div class="form-row cols-3">
+            <div class="field">
+              <label>Tanggal Mulai Pelaksanaan</label>
+              <input type="date" x-model="data.paket.tanggal_mulai" @change="saveKontrak">
+            </div>
+            <div class="field">
+              <label>Tanggal Selesai Pelaksanaan</label>
+              <input type="date" x-model="data.paket.tanggal_selesai" @change="saveKontrak">
+            </div>
+            <div class="field">
+              <label>Durasi (Bulan)</label>
+              <input type="text" :value="durasiBulan" disabled>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Jenis Kontrak</label>
+              <select x-model="data.paket.jenis_kontrak" @change="saveKontrak">
+                <option value="">— Pilih —</option>
+                <option value="lumpsum">Lumpsum</option>
+                <option value="waktu_penugasan">Waktu Penugasan</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Jenis Konsultansi</label>
+              <select x-model="data.paket.jenis_konsultansi" @change="saveKontrak">
+                <option value="">— Pilih —</option>
+                <option value="perencanaan">Perencanaan</option>
+                <option value="pengawasan">Pengawasan</option>
+                <option value="gabungan">Perencanaan &amp; Pengawasan</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field" style="max-width:200px">
+              <label>Bentuk Penyedia</label>
+              <select x-model="data.paket.bentuk_badan" @change="saveKontrak">
+                <option value="">— Pilih —</option>
+                <option value="PT">PT</option>
+                <option value="CV">CV</option>
+                <option value="Perorangan">Perorangan</option>
+              </select>
+            </div>
+            <div class="field" style="flex:1">
+              <label>Nama Penyedia</label>
+              <input type="text" class="upper" x-model="data.paket.nama_penyedia" @input="J.upr($event, data.paket, 'nama_penyedia'); saveKontrak()" placeholder="Contoh: Bintang Mas Consultant">
+            </div>
+          </div>
+
+          <h3 style="font-size:13px;margin:24px 0 8px;color:var(--c-admin);text-transform:uppercase;letter-spacing:0.05em">Pejabat Pengelola Kontrak</h3>
+          <div class="form-row">
+            <div class="field">
+              <label>Nama PPK</label>
+              <input type="text" class="upper" x-model="data.paket.ppk_nama" @input="J.upr($event, data.paket, 'ppk_nama'); saveKontrak()" placeholder="Contoh: Ir. Ahmad Susanto">
+            </div>
+            <div class="field">
+              <label>NIP PPK</label>
+              <input type="text" x-model="data.paket.ppk_nip" @input="saveKontrak" placeholder="18 digit NIP" maxlength="18">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Nama PPTK</label>
+              <input type="text" class="upper" x-model="data.paket.pptk_nama" @input="J.upr($event, data.paket, 'pptk_nama'); saveKontrak()" placeholder="Contoh: Drs. Budi Hartono">
+            </div>
+            <div class="field">
+              <label>NIP PPTK</label>
+              <input type="text" x-model="data.paket.pptk_nip" @input="saveKontrak" placeholder="18 digit NIP" maxlength="18">
+            </div>
+          </div>
+
+          <div class="form-row cols-1">
+            <div class="field">
+              <label>Output Diharapkan</label>
+              <input type="text" class="upper" x-model="data.paket.output_diharapkan" @input="J.upr($event, data.paket, 'output_diharapkan'); saveKontrak()" placeholder="Contoh: Laporan Pengawasan Mingguan, DED, Gambar Kerja, RKS, dst.">
+            </div>
+          </div>
+          <div class="flex items-center gap-4">
+            <span class="autosave-pill" :class="kontrakAutosaveState">
+              <span x-show="kontrakAutosaveState === 'saving'" class="loader" style="width:10px;height:10px;border-width:1.5px"></span>
+              <span x-text="kontrakAutosaveLabel"></span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Modal: Merge from another paket -->
+        <div x-show="mergeModalOpen" x-cloak
+          style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:1000;overflow-y:auto;padding:5vh 20px"
+          @click.self="mergeModalOpen = false">
+          <div class="card" style="max-width:600px;width:100%;margin:0 auto;max-height:90vh;overflow:auto">
+            <div class="card-header">
+              <div class="card-title">Pilih Paket untuk Digabung</div>
+              <button class="btn btn-sm btn-ghost" @click="mergeModalOpen = false">×</button>
+            </div>
+            <p class="muted mb-4" style="font-size:12px">SP2D dari paket yang dipilih akan dipindahkan ke paket ini. Paket sumber akan dihapus. Hanya tampil paket di OPD yang sama, belum terkunci.</p>
+            <div x-show="mergeable.length === 0" class="muted center" style="padding:24px">Tidak ada paket lain yang bisa digabung.</div>
+            <table class="data" x-show="mergeable.length > 0">
+              <thead><tr><th>Nama Pekerjaan</th><th class="num">Nilai</th><th class="num">SP2D</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="m in mergeable" :key="m.id">
+                  <tr>
+                    <td><strong x-text="m.nama_pekerjaan"></strong><div class="muted" style="font-size:11px" x-text="m.nomor_paket ? `Kode: ${m.nomor_paket}` : ''"></div></td>
+                    <td class="num money" x-text="J.rupiah(m.nilai_paket)"></td>
+                    <td class="num" x-text="m.jml_sp2d"></td>
+                    <td><button class="btn btn-sm btn-primary" @click="doMerge(m)">Gabung →</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Tenaga Ahli — Kontrak <span class="muted" style="font-size:11px;font-weight:normal">(editable)</span></div>
+            <button class="btn btn-sm btn-primary" @click="addTaKontrak">+ Tambah TA</button>
+          </div>
+          <table class="data editable" x-show="data?.ta_kontrak?.length > 0">
+            <thead>
+              <tr><th style="width:30px">#</th><th>Nama</th><th>NIK</th><th>Jabatan</th><th></th></tr>
+            </thead>
+            <tbody>
+              <template x-for="(t, i) in data?.ta_kontrak || []" :key="t.id || t._uid">
+                <tr>
+                  <td x-text="i+1"></td>
+                  <td><input type="text" class="upper" x-model="t.nama" @input="J.upr($event, t, 'nama'); saveTaKontrak(t)" placeholder="Nama Lengkap"></td>
+                  <td><input type="text" x-model="t.nik" @input="saveTaKontrak(t)" placeholder="16 Digit" maxlength="16"></td>
+                  <td><input type="text" class="upper" x-model="t.jabatan" @input="J.upr($event, t, 'jabatan'); saveTaKontrak(t)" placeholder="Contoh: Team Leader"></td>
+                  <td><button class="btn btn-sm btn-ghost" @click="delTaKontrak(t, i)" style="color:var(--c-red)">×</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="!data?.ta_kontrak?.length" class="muted center" style="padding:24px">Belum ada tenaga ahli. Klik "+ Tambah TA".</div>
+        </div>
+      </div>
+
+      <!-- TAB 2: BIAYA -->
+      <div x-show="tab==='biaya'">
+        <!-- Personel -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-title">Rincian Biaya Personel</div>
+            <button class="btn btn-sm btn-primary" @click="addBp" :disabled="false">+ Tambah Posisi</button>
+          </div>
+          <table class="data editable">
+            <thead>
+              <tr>
+                <th style="width:25px">#</th>
+                <th>Jabatan / Posisi</th>
+                <th>Jenjang Disyaratkan</th>
+                <th>Bidang</th>
+                <th class="num" style="width:80px">MM</th>
+                <th class="num" style="width:160px">Tarif/Bulan</th>
+                <th class="num" style="width:160px">Total</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(b, i) in data?.biaya_personel || []" :key="b.id || b._uid">
+                <tr>
+                  <td x-text="i+1"></td>
+                  <td><input class="upper" x-model="b.jabatan" :disabled="false" @input="J.upr($event, b, 'jabatan'); saveBp(b)" placeholder="Contoh: Team Leader"></td>
+                  <td>
+                    <select x-model="b.jenjang_disyaratkan" :disabled="false" @change="saveBp(b)">
+                      <option value="">-</option>
+                      <option>Tanpa Sertifikat</option>
+                      <option>Pratama</option>
+                      <option>Muda</option>
+                      <option>Madya</option>
+                      <option>Utama</option>
+                    </select>
+                  </td>
+                  <td><input class="upper" x-model="b.bidang" :disabled="false" @input="J.upr($event, b, 'bidang'); saveBp(b)" placeholder="Contoh: Sipil"></td>
+                  <td><input type="number" step="0.5" x-model.number="b.mm" :disabled="false" @input="saveBp(b)" class="num"></td>
+                  <td><input type="number" x-model.number="b.tarif_per_bulan" :disabled="false" @input="saveBp(b)" class="num"></td>
+                  <td class="num money" x-text="J.rupiah((b.mm || 0) * (b.tarif_per_bulan || 0))"></td>
+                  <td><button class="btn btn-sm btn-ghost" @click="delBp(b, i)" :disabled="false" style="color:var(--c-red)">×</button></td>
+                </tr>
+              </template>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" class="right"><strong>Total Personel</strong></td>
+                <td class="num money"><strong x-text="J.rupiah(totalPersonel)"></strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div x-show="!data?.biaya_personel?.length" class="muted center" style="padding:24px">Belum ada rincian personel. Klik "Tambah Posisi".</div>
+        </div>
+
+        <!-- Non-Personel -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Rincian Biaya Non-Personel</div>
+            <button class="btn btn-sm btn-primary" @click="addBnp" :disabled="false">+ Tambah Item</button>
+          </div>
+          <table class="data editable">
+            <thead>
+              <tr>
+                <th style="width:25px">#</th>
+                <th style="width:130px">Kategori</th>
+                <th>Uraian</th>
+                <th class="num" style="width:80px">Vol</th>
+                <th style="width:80px">Satuan</th>
+                <th class="num" style="width:140px">Harga Satuan</th>
+                <th class="num" style="width:140px">Total</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(b, i) in data?.biaya_non_personel || []" :key="b.id || b._uid">
+                <tr>
+                  <td x-text="i+1"></td>
+                  <td><input class="upper" x-model="b.kategori" :disabled="false" @input="J.upr($event, b, 'kategori'); saveBnp(b)" placeholder="Contoh: Transportasi"></td>
+                  <td><input class="upper" x-model="b.uraian" :disabled="false" @input="J.upr($event, b, 'uraian'); saveBnp(b)" placeholder="Contoh: Sewa Kendaraan"></td>
+                  <td><input type="number" step="0.01" x-model.number="b.volume" :disabled="false" @input="saveBnp(b)" class="num"></td>
+                  <td><input class="upper" x-model="b.satuan" :disabled="false" @input="J.upr($event, b, 'satuan'); saveBnp(b)" placeholder="Bulan / Paket"></td>
+                  <td><input type="number" x-model.number="b.harga_satuan" :disabled="false" @input="saveBnp(b)" class="num"></td>
+                  <td class="num money" x-text="J.rupiah((b.volume || 0) * (b.harga_satuan || 0))"></td>
+                  <td><button class="btn btn-sm btn-ghost" @click="delBnp(b, i)" :disabled="false" style="color:var(--c-red)">×</button></td>
+                </tr>
+              </template>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" class="right"><strong>Total Non-Personel</strong></td>
+                <td class="num money"><strong x-text="J.rupiah(totalNonPersonel)"></strong></td>
+                <td></td>
+              </tr>
+              <tr>
+                <td colspan="6" class="right"><strong>Grand Total Rincian</strong></td>
+                <td class="num money"><strong x-text="J.rupiah(totalPersonel + totalNonPersonel)"></strong></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div x-show="!data?.biaya_non_personel?.length" class="muted center" style="padding:24px">Belum ada rincian non-personel. Klik "Tambah Item".</div>
+        </div>
+      </div>
+
+      <!-- TAB 3: VERIFIKASI -->
+      <div x-show="tab==='verifikasi'">
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-title">Tenaga Ahli — Hasil Verifikasi Lapangan</div>
+            <button class="btn btn-sm btn-primary" @click="addTaa" :disabled="false">+ Tambah Hasil Wawancara</button>
+          </div>
+          <p class="muted mb-4" style="font-size:12px">
+            Untuk tiap posisi di rincian personel, isi siapa yang aktualnya bekerja. Status: <strong>sesuai</strong> (orang sama dengan kontrak), <strong>pengganti</strong> (orang lain mengganti), <strong>fiktif</strong> (tidak ada orangnya / tidak ditemukan).
+          </p>
+
+          <template x-for="(t, i) in data?.ta_aktual || []" :key="t.id || t._uid">
+            <div class="ta-section">
+              <div class="flex items-center justify-between mb-2">
+                <strong x-text="`Verifikasi #${i+1}`"></strong>
+                <button class="btn btn-sm btn-ghost" @click="delTaa(t, i)" :disabled="false" style="color:var(--c-red)">× Hapus</button>
+              </div>
+              <div class="form-row cols-3">
+                <div class="field">
+                  <label>Posisi yang Diisi</label>
+                  <select x-model.number="t.biaya_personel_id" :disabled="false" @change="saveTaa(t)">
+                    <option value="">— Pilih Posisi —</option>
+                    <template x-for="bp in data?.biaya_personel || []" :key="bp.id">
+                      <option :value="bp.id" x-text="`${bp.jabatan} (${bp.jenjang_disyaratkan || '-'})`"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Status</label>
+                  <select x-model="t.status" :disabled="false" @change="saveTaa(t)">
+                    <option value="sesuai">Sesuai dengan kontrak</option>
+                    <option value="pengganti">Pengganti (orang lain)</option>
+                    <option value="fiktif">Fiktif / tidak ditemukan</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Hari Kerja Aktual</label>
+                  <input type="number" x-model.number="t.hari_kerja_aktual" :disabled="t.status === 'fiktif'" @input="saveTaa(t)" placeholder="22 Hari = 1 MM">
+                </div>
+              </div>
+
+              <div class="form-row" x-show="t.status !== 'fiktif'">
+                <div class="field"><label>Nama Aktual</label><input x-model="t.nama" :disabled="false" @input="saveTaa(t)"></div>
+                <div class="field"><label>NIK</label><input x-model="t.nik" :disabled="false" @input="saveTaa(t)"></div>
+              </div>
+
+              <div class="form-row cols-3" x-show="t.status !== 'fiktif'">
+                <div class="field">
+                  <label>Pendidikan</label>
+                  <select x-model="t.pendidikan_jenjang" :disabled="false" @change="saveTaa(t)">
+                    <option value="">-</option>
+                    <option>SMA/SMK</option><option>D3/D4</option>
+                    <option>S1</option><option>S2</option><option>S3</option>
+                  </select>
+                </div>
+                <div class="field"><label>Jurusan</label><input x-model="t.pendidikan_jurusan" :disabled="false" @input="saveTaa(t)"></div>
+                <div class="field">
+                  <label>Jenjang Efektif</label>
+                  <select x-model="t.jenjang_efektif" :disabled="false" @change="saveTaa(t)">
+                    <option value="">— auto —</option>
+                    <option>Tanpa Sertifikat</option>
+                    <option>Pratama</option>
+                    <option>Muda</option>
+                    <option>Madya</option>
+                    <option>Utama</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row cols-3" x-show="t.status !== 'fiktif'">
+                <div class="field"><label>No SKA / SKK</label><input x-model="t.no_ska" :disabled="false" @input="saveTaa(t)"></div>
+                <div class="field">
+                  <label>Jenjang SKA</label>
+                  <select x-model="t.jenjang_ska" :disabled="false" @change="saveTaa(t)">
+                    <option value="">-</option>
+                    <option>Pratama</option>
+                    <option>Muda</option>
+                    <option>Madya</option>
+                    <option>Utama</option>
+                  </select>
+                </div>
+                <div class="field"><label>Masa Berlaku SKA</label><input type="date" x-model="t.masa_berlaku_ska" :disabled="false" @change="saveTaa(t)"></div>
+              </div>
+
+              <div class="form-row" x-show="t.status !== 'fiktif'">
+                <div class="field"><label>Klasifikasi SKA</label><input class="upper" x-model="t.klasifikasi_ska" :disabled="false" @input="J.upr($event, t, 'klasifikasi_ska'); saveTaa(t)" placeholder="Contoh: Ahli Teknik Bangunan Gedung"></div>
+                <div class="flex gap-2 items-end">
+                  <button class="btn btn-sm" @click="cekSka(t)" :disabled="skaChecking[t.id]">
+                    <span x-show="!skaChecking[t.id]">🔍 Cek SKA</span>
+                    <span x-show="skaChecking[t.id]" class="loader" style="width:12px;height:12px"></span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-row cols-3">
+                <div class="field"><label>Narasumber</label><input x-model="t.narasumber" :disabled="false" @input="saveTaa(t)"></div>
+                <div class="field"><label>Tgl Wawancara</label><input type="date" x-model="t.tanggal_wawancara" :disabled="false" @change="saveTaa(t)"></div>
+                <div class="field"><label>Catatan</label><input x-model="t.catatan_wawancara" :disabled="false" @input="saveTaa(t)"></div>
+              </div>
+            </div>
+          </template>
+          <div x-show="!data?.ta_aktual?.length" class="muted center" style="padding:24px">Belum ada hasil verifikasi. Klik "Tambah Hasil Wawancara".</div>
+        </div>
+
+        <!-- Verifikasi Non-Personel -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Verifikasi Realisasi Non-Personel</div>
+          </div>
+          <table class="data editable">
+            <thead>
+              <tr>
+                <th>Item Non-Personel</th>
+                <th class="num">Kontrak</th>
+                <th>Status Realisasi</th>
+                <th class="num">Vol Aktual</th>
+                <th class="num">Harga Bukti Sah</th>
+                <th>Catatan Pajak</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="b in data?.biaya_non_personel || []" :key="b.id">
+                <tr>
+                  <td>
+                    <strong x-text="b.uraian"></strong>
+                    <div class="muted" style="font-size:11px" x-text="`${b.kategori || '-'} · ${b.volume} ${b.satuan || ''} × ${J.rupiah(b.harga_satuan)}`"></div>
+                  </td>
+                  <td class="num money" x-text="J.rupiah((b.volume || 0) * (b.harga_satuan || 0))"></td>
+                  <td>
+                    <select x-model="getVerif(b.id).status_realisasi" :disabled="false" @change="saveVerif(b.id)">
+                      <option value="sesuai">Sesuai</option>
+                      <option value="kurang">Kurang volume</option>
+                      <option value="tidak_ada">Tidak ada</option>
+                      <option value="mark_up">Mark-up harga</option>
+                      <option value="fiktif">Fiktif</option>
+                    </select>
+                  </td>
+                  <td><input type="number" x-model.number="getVerif(b.id).volume_aktual" :disabled="getVerif(b.id).status_realisasi !== 'kurang'" @input="saveVerif(b.id)" class="num"></td>
+                  <td><input type="number" x-model.number="getVerif(b.id).harga_bukti_sah" :disabled="getVerif(b.id).status_realisasi !== 'mark_up'" @input="saveVerif(b.id)" class="num"></td>
+                  <td><input x-model="getVerif(b.id).catatan_pajak" :disabled="false" @input="saveVerif(b.id)" placeholder="Memo"></td>
+                  <td><input x-model="getVerif(b.id).catatan" :disabled="false" @input="saveVerif(b.id)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 4: HASIL AUDIT (rekap 3 area + temuan numerik pelaksanaan) -->
+      <div x-show="tab==='hasil'">
+        <!-- Ringkasan Eksekutif -->
+        <div class="card mb-4" style="background:linear-gradient(135deg, var(--c-admin-soft), white);border-color:var(--c-admin)">
+          <div class="card-header" style="border-bottom:1px solid var(--c-admin);padding-bottom:12px">
+            <div>
+              <div class="stat-label" style="color:var(--c-admin)">RINGKASAN EKSEKUTIF</div>
+              <h2 style="font-family:'Fraunces',serif;margin-top:4px">Hasil Audit Kepatuhan Paket</h2>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-primary" @click="bapkModalOpen = true">📜 Buat BAPK</button>
+            </div>
+          </div>
+          <div class="grid grid-3">
+            <div>
+              <div class="stat-label">Nilai Paket</div>
+              <div class="stat-value money" style="font-size:20px" x-text="J.rupiah(data?.paket?.nilai_paket)"></div>
+            </div>
+            <div>
+              <div class="stat-label" style="color:var(--c-amber)">Total Pengembalian</div>
+              <div class="stat-value money" style="font-size:20px;color:var(--c-amber)" x-text="J.rupiah(totalPengembalianAll)"></div>
+              <div class="stat-sub" x-text="data?.paket?.nilai_paket ? `${(totalPengembalianAll/data.paket.nilai_paket*100).toFixed(1)}% dari nilai paket` : ''"></div>
+            </div>
+            <div>
+              <div class="stat-label">Skor Kepatuhan</div>
+              <div class="stat-value" style="font-size:20px" x-text="`${skorKepatuhan}%`"></div>
+              <div class="stat-sub" x-text="`${totalPatuh}/${totalDinilai} item dinilai patuh`"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Area Summary Cards -->
+        <div class="grid grid-3 mb-4">
+          <template x-for="area in ['perencanaan','pelaksanaan','pelaporan']" :key="area">
+            <div class="card" :style="`border-left:4px solid ${areaColor(area)}`">
+              <div class="card-header" style="border-bottom:1px solid var(--c-line);padding-bottom:10px;margin-bottom:10px">
+                <div>
+                  <div class="stat-label" :style="`color:${areaColor(area)}`" x-text="area === 'perencanaan' ? '📋 PERENCANAAN' : (area === 'pelaksanaan' ? '⚙ PELAKSANAAN' : '📑 PELAPORAN')"></div>
+                </div>
+              </div>
+              <div style="font-size:12px">
+                <div class="flex justify-between mb-2">
+                  <span>✅ Patuh</span>
+                  <strong x-text="summaryByArea(area).patuh"></strong>
+                </div>
+                <div class="flex justify-between mb-2">
+                  <span style="color:var(--c-amber)">⚠ Lemah</span>
+                  <strong x-text="summaryByArea(area).lemah"></strong>
+                </div>
+                <div class="flex justify-between mb-2">
+                  <span style="color:var(--c-red)">❌ Tidak Patuh</span>
+                  <strong x-text="summaryByArea(area).tidak_patuh"></strong>
+                </div>
+                <div class="flex justify-between mb-2">
+                  <span class="muted">○ Belum Dinilai</span>
+                  <strong x-text="summaryByArea(area).belum_dinilai"></strong>
+                </div>
+                <div class="flex justify-between" style="border-top:1px solid var(--c-line);padding-top:8px;margin-top:8px">
+                  <span style="color:var(--c-amber)">Dampak Rupiah</span>
+                  <strong class="money" style="color:var(--c-amber)" x-text="J.rupiah(summaryByArea(area).total_dampak)"></strong>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Temuan Checklist (3 area) -->
+        <div class="card mb-4" x-show="checklistFindings.length > 0" style="padding:0">
+          <div class="card-header" style="padding:16px 20px">
+            <div class="card-title">Temuan Kepatuhan Checklist (3 Area)</div>
+          </div>
+          <table class="data">
+            <thead>
+              <tr><th>Area</th><th>Kode</th><th>Item Uji</th><th>Status</th><th class="num">Dampak Rupiah</th><th>Catatan</th></tr>
+            </thead>
+            <tbody>
+              <template x-for="t in checklistFindings" :key="t.item_id">
+                <tr>
+                  <td><span class="badge" :style="`background:${areaColor(t.area)}20;color:${areaColor(t.area)}`" x-text="t.area"></span></td>
+                  <td><span class="code" x-text="t.kode"></span></td>
+                  <td>
+                    <strong x-text="t.judul" style="font-size:13px"></strong>
+                    <div class="muted" style="font-size:11px;font-style:italic" x-text="t.dasar_hukum"></div>
+                  </td>
+                  <td><span class="badge" :style="`background:${statusColor(t.status)}20;color:${statusColor(t.status)}`" x-text="statusLabel(t.status)"></span></td>
+                  <td class="num money" style="color:var(--c-amber)" x-text="t.dampak_pengembalian > 0 ? J.rupiah(t.dampak_pengembalian) : '-'"></td>
+                  <td style="font-size:12px;max-width:300px" x-text="t.catatan || '-'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Temuan Numerik Pelaksanaan (Engine: Skenario 1-7 + N1-N5 + Lintas) -->
+        <div class="card" x-show="data?.temuan?.length > 0" style="padding:0">
+          <div class="card-header" style="padding:16px 20px">
+            <div class="card-title">Temuan Kuantitatif Pelaksanaan <span class="muted" style="font-size:11px;font-weight:normal">(dari engine pengujian: skenario 1-7 personel + N1-N5 non-personel)</span></div>
+          </div>
+          <table class="data">
+            <thead>
+              <tr><th>Jenis</th><th>Skenario</th><th>Subjek</th><th>Uraian</th><th class="num">Nilai Kontrak</th><th class="num">Nilai Berhak</th><th class="num">Selisih</th></tr>
+            </thead>
+            <tbody>
+              <template x-for="t in data?.temuan || []" :key="t.id">
+                <tr>
+                  <td><span class="badge" :class="t.jenis === 'personel' ? 'badge-navy' : (t.jenis.startsWith('lintas') ? 'badge-amber' : 'badge-slate')" x-text="t.jenis"></span></td>
+                  <td><span class="code" x-text="t.skenario"></span></td>
+                  <td><strong x-text="t.nama_subjek || '-'"></strong><div class="muted" style="font-size:11px" x-text="t.nik_subjek"></div></td>
+                  <td x-text="t.uraian"></td>
+                  <td class="num money" x-text="J.rupiah(t.nilai_kontrak)"></td>
+                  <td class="num money" x-text="J.rupiah(t.nilai_berhak)"></td>
+                  <td class="num money" style="color:var(--c-amber)" x-text="J.rupiah(t.selisih)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <div x-show="!data?.temuan?.length && checklistFindings.length === 0" class="card center muted" style="padding:48px">
+          <p>Belum ada temuan. Isi checklist 3 area + jalankan "🔒 Kunci & Audit" untuk hasil engine numerik.</p>
+        </div>
+
+        <!-- BAPK Generator Modal -->
+        <div x-show="bapkModalOpen" x-cloak
+          style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.55);z-index:1000;overflow-y:auto;padding:5vh 20px"
+          @click.self="bapkModalOpen = false">
+          <div class="card" style="max-width:560px;width:100%;margin:0 auto">
+            <div class="card-header">
+              <div class="card-title">📜 Generate Berita Acara Permintaan Keterangan (BAPK)</div>
+              <button class="btn btn-sm btn-ghost" @click="bapkModalOpen = false">×</button>
+            </div>
+            <p class="muted mb-4" style="font-size:13px">
+              Sistem akan otomatis bikin BAPK dengan <strong>hasil keterangan auto-generated</strong> dari hasil audit paket ini (3 area checklist + temuan numerik). Auditor tinggal review, isi nama PPK/PPTK/Penyedia, lalu download Word & tanda tangan.
+            </p>
+            <p class="muted mb-4" style="font-size:12px">
+              <strong>Pra-syarat:</strong> Sudah ada Surat Tugas Aktif (set di menu Surat Tugas).
+            </p>
+
+            <div class="field mb-4">
+              <label>BAPK ini ditujukan kepada:</label>
+              <select x-model="bapkJenis">
+                <option value="ppk">PPK — Pejabat Pembuat Komitmen</option>
+                <option value="pptk">PPTK — Pejabat Pelaksana Teknis Kegiatan</option>
+                <option value="penyedia">Penyedia / Direktur CV / PT</option>
+                <option value="lain">Pihak lain (isi manual nanti)</option>
+              </select>
+            </div>
+
+            <div class="alert alert-warn">
+              BAPK akan dibuat sebagai <strong>draft</strong>. Setelah ini kamu akan diarahkan ke halaman Berita Acara untuk:
+              <ul style="margin:6px 0 0 18px;font-size:12px">
+                <li>Isi nama, NIP, nomor kontak Pemberi Keterangan</li>
+                <li>Review hasil keterangan (sudah auto-generated, tinggal edit kalau perlu)</li>
+                <li>Cek tanda tangan: Pemeriksa BPK (auto dari Surat Tugas), PPK/PPTK/Penyedia (isi)</li>
+                <li>Download .docx → cetak → tanda tangan basah</li>
+              </ul>
+            </div>
+
+            <div class="flex gap-2 mt-4">
+              <button class="btn" @click="bapkModalOpen = false">Batal</button>
+              <div class="flex-1"></div>
+              <button class="btn btn-primary" @click="doGenerateBapk" :disabled="bapkGenerating">
+                <span x-show="!bapkGenerating">🪄 Generate BAPK</span>
+                <span x-show="bapkGenerating" class="loader"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const JENIS_LABEL = { perencanaan: 'Perencanaan', pengawasan: 'Pengawasan', gabungan: 'Perencanaan + Pengawasan', non_konstruksi: 'Non-Konstruksi' };
+    function paketAdmin() {
+      return {
+        paketId: null,
+        data: null,
+        tab: 'kontrak',
+        locking: false,
+        unlocking: false,
+        skaChecking: {},
+        verifMap: {},
+        mergeModalOpen: false,
+        mergeable: [],
+        bapkModalOpen: false,
+        bapkJenis: 'ppk',
+        bapkGenerating: false,
+        async doGenerateBapk() {
+          this.bapkGenerating = true;
+          try {
+            const r = await J.fetch(`/api/admin/paket/${this.paketId}/generate-bapk`, {
+              method: 'POST',
+              body: { jenis_pemberi: this.bapkJenis },
+            });
+            J.toast('BAPK draft dibuat. Review & lengkapi data PPK/PPTK/Penyedia.', 'success');
+            this.bapkModalOpen = false;
+            location.href = `/admin/berita-acara?edit=${r.id}`;
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.bapkGenerating = false; }
+        },
+        kontrakAutosaveState: '',
+        kontrakAutosaveLabel: '',
+        checklist: [],
+        checklistSummary: [],
+        checklistByArea(area) { return this.checklist.filter(c => c.area === area); },
+        summaryByArea(area) {
+          const found = this.checklistSummary.find(s => s.area === area);
+          return found || { total_items: 8, patuh: 0, lemah: 0, tidak_patuh: 0, na: 0, belum_dinilai: 8, total_dampak: 0 };
+        },
+        checklistBadge(area) {
+          const s = this.summaryByArea(area);
+          const dinilai = s.patuh + s.lemah + s.tidak_patuh + s.na;
+          return `${dinilai}/${s.total_items}`;
+        },
+        statusColor(status) {
+          return { patuh: 'var(--c-emerald)', lemah: 'var(--c-amber)', tidak_patuh: 'var(--c-red)', na: 'var(--c-slate)' }[status] || 'var(--c-line)';
+        },
+        areaColor(area) {
+          return { perencanaan: 'var(--c-admin)', pelaksanaan: 'var(--c-emerald)', pelaporan: '#7c3aed' }[area] || 'var(--c-slate)';
+        },
+        async loadChecklist() {
+          try {
+            const [items, summary] = await Promise.all([
+              J.fetch(`/api/admin/paket/${this.paketId}/checklist`),
+              J.fetch(`/api/admin/paket/${this.paketId}/checklist/summary`),
+            ]);
+            this.checklist = items;
+            this.checklistSummary = summary;
+          } catch (e) { console.warn('checklist load:', e.message); }
+        },
+        saveChecklist(item) {
+          if (!item.status) {
+            // Status kosong → delete row
+            if (item.hasil_id) {
+              this.scheduleSave('checklist_' + item.item_id, async () => {
+                try { await J.fetch(`/api/admin/paket/${this.paketId}/checklist/${item.item_id}`, { method: 'DELETE' }); item.hasil_id = null; await this.loadChecklist(); } catch (e) { J.toast(e.message, 'error'); }
+              });
+            }
+            return;
+          }
+          this.scheduleSave('checklist_' + item.item_id, async () => {
+            try {
+              await J.fetch(`/api/admin/paket/${this.paketId}/checklist/${item.item_id}`, {
+                method: 'POST',
+                body: { status: item.status, catatan: item.catatan, lokasi_bukti: item.lokasi_bukti, dampak_pengembalian: item.dampak_pengembalian },
+              });
+              await this.loadChecklist(); // refresh summary
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        get durasiBulan() {
+          if (!this.data?.paket?.tanggal_mulai || !this.data?.paket?.tanggal_selesai) return '-';
+          const a = new Date(this.data.paket.tanggal_mulai);
+          const b = new Date(this.data.paket.tanggal_selesai);
+          const m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth()) + (b.getDate() >= a.getDate() ? 0 : -1) + 1;
+          return m > 0 ? `${m} bulan` : '-';
+        },
+        get locked() { return false; }, // admin selalu bisa edit; lock cuma applies ke OPD
+        get totalPersonel() {
+          return (this.data?.biaya_personel || []).reduce((s, b) => s + (b.mm || 0) * (b.tarif_per_bulan || 0), 0);
+        },
+        get totalNonPersonel() {
+          return (this.data?.biaya_non_personel || []).reduce((s, b) => s + (b.volume || 0) * (b.harga_satuan || 0), 0);
+        },
+        get totalTemuan() {
+          return (this.data?.temuan || []).reduce((s, t) => s + (t.selisih || 0), 0);
+        },
+        get totalDampakChecklist() {
+          return this.checklistSummary.reduce((s, x) => s + (x.total_dampak || 0), 0);
+        },
+        get totalPengembalianAll() { return this.totalTemuan + this.totalDampakChecklist; },
+        get totalPatuh() { return this.checklistSummary.reduce((s, x) => s + (x.patuh || 0), 0); },
+        get totalDinilai() {
+          return this.checklistSummary.reduce((s, x) => s + (x.patuh || 0) + (x.lemah || 0) + (x.tidak_patuh || 0) + (x.na || 0), 0);
+        },
+        get skorKepatuhan() {
+          // Dari item yang dinilai (exclude N/A & belum dinilai)
+          const efektif = this.checklistSummary.reduce((s, x) => s + (x.patuh || 0) + (x.lemah || 0) + (x.tidak_patuh || 0), 0);
+          if (efektif === 0) return '-';
+          // Patuh = 100%, Lemah = 50%, Tidak Patuh = 0%
+          const score = this.checklistSummary.reduce((s, x) => s + (x.patuh || 0) * 100 + (x.lemah || 0) * 50, 0);
+          return Math.round(score / efektif);
+        },
+        get checklistFindings() {
+          // Hanya item dengan status non-patuh & non-na (yang jadi temuan)
+          return this.checklist.filter(c => c.status === 'lemah' || c.status === 'tidak_patuh');
+        },
+        statusLabel(s) {
+          return { patuh: '✅ Patuh', lemah: '⚠ Lemah', tidak_patuh: '❌ Tidak Patuh', na: '⊘ N/A' }[s] || '— Belum Dinilai';
+        },
+        async init() {
+          const url = new URL(location);
+          this.paketId = parseInt(url.searchParams.get('id'), 10);
+          if (!this.paketId) { location.href = '/admin/dashboard'; return; }
+          await this.load();
+          if (this.data?.paket?.status === 'terkunci') this.tab = 'hasil';
+          this.debouncers = {};
+        },
+        async load() {
+          try {
+            this.data = await J.fetch(`/api/admin/paket/${this.paketId}`);
+            // build verif map
+            this.verifMap = {};
+            for (const v of this.data.verif_np || []) {
+              this.verifMap[v.biaya_non_personel_id] = v;
+            }
+            await this.loadChecklist();
+          } catch (e) {
+            if (e.status === 401) { location.href = '/admin/login'; return; }
+            J.toast(e.message, 'error');
+          }
+        },
+        getVerif(bnpId) {
+          if (!this.verifMap[bnpId]) {
+            this.verifMap[bnpId] = { biaya_non_personel_id: bnpId, status_realisasi: 'sesuai' };
+          }
+          return this.verifMap[bnpId];
+        },
+        // Helper: debounced save with key
+        scheduleSave(key, fn) {
+          if (!this.debouncers[key]) this.debouncers[key] = J.debounce(fn, 800);
+          this.debouncers[key]();
+        },
+        // === BIAYA PERSONEL ===
+        addBp() {
+          this.data.biaya_personel.push({ _uid: 'tmp_' + Math.random(), id: null, jabatan: '', jenjang_disyaratkan: '', bidang: '', mm: 0, tarif_per_bulan: 0 });
+        },
+        saveBp(b) {
+          if (this.locked) return;
+          if (!b.jabatan) return;
+          this.scheduleSave('bp_' + (b.id || b._uid), async () => {
+            try {
+              const body = { jabatan: b.jabatan, jenjang_disyaratkan: b.jenjang_disyaratkan, bidang: b.bidang, mm: b.mm, tarif_per_bulan: b.tarif_per_bulan, tenaga_ahli_kontrak_id: b.tenaga_ahli_kontrak_id };
+              if (b.id) await J.fetch(`/api/admin/biaya-personel/${b.id}`, { method: 'PUT', body });
+              else { const r = await J.fetch(`/api/admin/paket/${this.paketId}/biaya-personel`, { method: 'POST', body }); b.id = r.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        async delBp(b, i) {
+          if (this.locked || !confirm('Hapus posisi ini?')) return;
+          if (b.id) await J.fetch(`/api/admin/biaya-personel/${b.id}`, { method: 'DELETE' });
+          this.data.biaya_personel.splice(i, 1);
+        },
+        // === BIAYA NON-PERSONEL ===
+        addBnp() {
+          this.data.biaya_non_personel.push({ _uid: 'tmp_' + Math.random(), id: null, kategori: '', uraian: '', volume: 0, satuan: '', harga_satuan: 0 });
+        },
+        saveBnp(b) {
+          if (this.locked) return;
+          if (!b.uraian) return;
+          this.scheduleSave('bnp_' + (b.id || b._uid), async () => {
+            try {
+              const body = { kategori: b.kategori, uraian: b.uraian, volume: b.volume, satuan: b.satuan, harga_satuan: b.harga_satuan };
+              if (b.id) await J.fetch(`/api/admin/biaya-non-personel/${b.id}`, { method: 'PUT', body });
+              else { const r = await J.fetch(`/api/admin/paket/${this.paketId}/biaya-non-personel`, { method: 'POST', body }); b.id = r.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        async delBnp(b, i) {
+          if (this.locked || !confirm('Hapus item ini?')) return;
+          if (b.id) await J.fetch(`/api/admin/biaya-non-personel/${b.id}`, { method: 'DELETE' });
+          this.data.biaya_non_personel.splice(i, 1);
+        },
+        // === VERIFIKASI NON-PERSONEL ===
+        saveVerif(bnpId) {
+          if (this.locked) return;
+          this.scheduleSave('verif_' + bnpId, async () => {
+            try {
+              const v = this.verifMap[bnpId];
+              await J.fetch(`/api/admin/biaya-non-personel/${bnpId}/verifikasi`, { method: 'POST', body: v });
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        // === TENAGA AHLI AKTUAL ===
+        addTaa() {
+          this.data.ta_aktual.push({ _uid: 'tmp_' + Math.random(), id: null, status: 'sesuai' });
+        },
+        saveTaa(t) {
+          if (this.locked) return;
+          this.scheduleSave('taa_' + (t.id || t._uid), async () => {
+            try {
+              if (t.id) await J.fetch(`/api/admin/tenaga-ahli-aktual/${t.id}`, { method: 'PUT', body: t });
+              else { const r = await J.fetch(`/api/admin/paket/${this.paketId}/tenaga-ahli-aktual`, { method: 'POST', body: t }); t.id = r.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        async delTaa(t, i) {
+          if (this.locked || !confirm('Hapus verifikasi ini?')) return;
+          if (t.id) await J.fetch(`/api/admin/tenaga-ahli-aktual/${t.id}`, { method: 'DELETE' });
+          this.data.ta_aktual.splice(i, 1);
+        },
+        async cekSka(t) {
+          if (!t.nik && !t.nama) { J.toast('Isi NIK atau nama dulu', 'warn'); return; }
+          this.skaChecking[t.id] = true;
+          try {
+            const r = await J.fetch('/api/ska/check', { method: 'POST', body: { nik: t.nik, nama: t.nama, refresh: false } });
+            J.toast('Hasil SKA disimpan di cache. Lihat detail di Hasil Audit.', 'info');
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.skaChecking[t.id] = false; }
+        },
+        // === EDIT KONTRAK (admin override) ===
+        saveKontrak() {
+          this.kontrakAutosaveState = 'saving';
+          this.kontrakAutosaveLabel = 'Menyimpan...';
+          this.scheduleSave('kontrak', async () => {
+            try {
+              await J.fetch(`/api/admin/paket/${this.paketId}/kontrak`, {
+                method: 'PUT',
+                body: {
+                  no_kontrak: this.data.paket.no_kontrak,
+                  tanggal_kontrak: this.data.paket.tanggal_kontrak,
+                  tanggal_mulai: this.data.paket.tanggal_mulai,
+                  tanggal_selesai: this.data.paket.tanggal_selesai,
+                  bentuk_badan: this.data.paket.bentuk_badan,
+                  nama_penyedia: this.data.paket.nama_penyedia,
+                  ppk_nama: this.data.paket.ppk_nama,
+                  ppk_nip: this.data.paket.ppk_nip,
+                  pptk_nama: this.data.paket.pptk_nama,
+                  pptk_nip: this.data.paket.pptk_nip,
+                  jenis_kontrak: this.data.paket.jenis_kontrak,
+                  jenis_konsultansi: this.data.paket.jenis_konsultansi,
+                  output_diharapkan: this.data.paket.output_diharapkan,
+                },
+              });
+              this.kontrakAutosaveState = 'saved';
+              this.kontrakAutosaveLabel = '✓ Tersimpan';
+            } catch (e) {
+              this.kontrakAutosaveState = '';
+              this.kontrakAutosaveLabel = '';
+              J.toast(e.message, 'error');
+            }
+          });
+        },
+        // === TA KONTRAK (admin) ===
+        addTaKontrak() {
+          this.data.ta_kontrak.push({ _uid: 'tmp_' + Math.random(), id: null, nama: '', nik: '', jabatan: '' });
+        },
+        saveTaKontrak(t) {
+          if (!t.nama || !t.nik || !t.jabatan) return;
+          this.scheduleSave('takontrak_' + (t.id || t._uid), async () => {
+            try {
+              const body = { nama: t.nama, nik: t.nik, jabatan: t.jabatan };
+              if (t.id) await J.fetch(`/api/admin/tenaga-ahli-kontrak/${t.id}`, { method: 'PUT', body });
+              else { const r = await J.fetch(`/api/admin/paket/${this.paketId}/tenaga-ahli-kontrak`, { method: 'POST', body }); t.id = r.id; }
+            } catch (e) { J.toast(e.message, 'error'); }
+          });
+        },
+        async delTaKontrak(t, i) {
+          if (!confirm(`Hapus TA "${t.nama || 'baris ke-' + (i+1)}"?`)) return;
+          if (t.id) await J.fetch(`/api/admin/tenaga-ahli-kontrak/${t.id}`, { method: 'DELETE' });
+          this.data.ta_kontrak.splice(i, 1);
+        },
+        async editName() {
+          const baru = prompt('Nama pekerjaan paket:', this.data.paket.nama_pekerjaan);
+          if (baru == null) return;
+          try {
+            await J.fetch(`/api/admin/paket/${this.paketId}/info`, { method: 'PUT', body: { nama_pekerjaan: baru, nomor_paket: this.data.paket.nomor_paket } });
+            await this.load();
+            J.toast('Nama pekerjaan diupdate', 'success');
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async splitSp2d(s) {
+          if (!confirm(`Pisahkan SP2D "${s.no_sp2d}" jadi paket sendiri? Akan jadi paket baru dengan nilai Rp ${(s.nilai_sp2d || 0).toLocaleString('id-ID')}.`)) return;
+          try {
+            const r = await J.fetch(`/api/admin/sp2d/${s.id}/split`, { method: 'POST' });
+            J.toast('SP2D dipisahkan ke paket baru', 'success');
+            await this.load();
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async openMergeModal() {
+          try {
+            this.mergeable = await J.fetch(`/api/admin/paket/${this.paketId}/mergeable`);
+            this.mergeModalOpen = true;
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async doMerge(m) {
+          if (!confirm(`Gabungkan SP2D dari "${m.nama_pekerjaan}" (${m.jml_sp2d} SP2D, Rp ${(m.nilai_paket||0).toLocaleString('id-ID')}) ke paket ini? Paket asal akan dihapus.`)) return;
+          try {
+            await J.fetch(`/api/admin/paket/${this.paketId}/merge-from/${m.id}`, { method: 'POST' });
+            this.mergeModalOpen = false;
+            J.toast('Paket digabung', 'success');
+            await this.load();
+          } catch (e) { J.toast(e.message, 'error'); }
+        },
+        async unlock() {
+          if (!confirm('Buka kunci paket? Status balik ke "lengkap", OPD bisa edit lagi. Temuan tidak dihapus.')) return;
+          this.unlocking = true;
+          try {
+            await J.fetch(`/api/audit/paket/${this.paketId}/unlock`, { method: 'POST' });
+            J.toast('Paket dibuka kunci', 'success');
+            await this.load();
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.unlocking = false; }
+        },
+        async lockAndAudit() {
+          const isReaudit = this.data?.paket?.status === 'terkunci';
+          const msg = isReaudit
+            ? 'Audit ulang paket ini? Temuan lama akan dihapus dan diganti dengan hasil baru.'
+            : 'Kunci paket dan jalankan audit? Setelah dikunci OPD tidak bisa edit lagi.';
+          if (!confirm(msg)) return;
+          this.locking = true;
+          try {
+            await J.fetch(`/api/audit/paket/${this.paketId}/lock-and-audit`, { method: 'POST' });
+            J.toast('Paket dikunci, audit selesai', 'success');
+            await this.load();
+            this.tab = 'hasil';
+          } catch (e) { J.toast(e.message, 'error'); }
+          finally { this.locking = false; }
+        },
+      };
+    }
+  </script>
+</body>
+</html>
